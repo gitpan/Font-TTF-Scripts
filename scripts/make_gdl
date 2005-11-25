@@ -3,10 +3,32 @@ use Font::Scripts::GDL;
 use IO::File;
 use Getopt::Std;
 
-getopts('i:');
+getopts('a:i:l:n:s:z:');
 
-$f = Font::Scripts::GDL->read_font($ARGV[1], $ARGV[0]) || die "Can't read font information";
-$outfh = IO::File->new("> $ARGV[2]") || die "Can't open $ARGV[2] for writing";
+unless ($ARGV[1])
+{
+    die <<'EOT';
+    make_gdl [-a file] [-i file] [-l type [-s num]] [-n num] [-z bitfield] infile outfile
+Creates font specific GDL from a font and optional attachment point database
+
+  -a file       Attachment point database
+  -i file       add #include statement at end of file
+  -l type       type =
+                    first - class name is first code, contents other codes
+                    last  - class name is last code, contents other codes
+                    firstcomp - treat extensions as part of elements, as first
+                    lastcomp - treat extensons as part of elements, as last
+  -n num        Add a normalization substitution with the given pass number
+  -s num        Add ligature substitution rules with the given pass number
+  -z bitfield   Bitfield of various controls:
+                    0 - use component properties to set ligature bounding boxes
+EOT
+}
+
+$comp = $1 if ($opt_l =~ s/(comp)$//oi);
+
+$f = Font::Scripts::GDL->read_font($ARGV[0], $opt_a) || die "Can't read font information";
+$outfh = IO::File->new("> $ARGV[1]") || die "Can't open $ARGV[1] for writing";
 
 foreach $g (@{$f->{'glyphs'}})
 {
@@ -14,7 +36,7 @@ foreach $g (@{$f->{'glyphs'}})
     foreach $p (keys %{$g->{'points'}})
     {
         my ($pname) = $p;
-        
+
         if ($pname =~ s/^(.+)M$/_$1/o)
         { }
         elsif ($pname =~ s/^(.+)S$/$1/o)
@@ -25,10 +47,12 @@ foreach $g (@{$f->{'glyphs'}})
 }
 
 $f->start_gdl($outfh);
-$f->out_gdl($outfh);
-$f->make_classes();
+$f->make_classes(-ligatures => $opt_l, -ligtype => $comp);
+$f->out_gdl($outfh, -split_ligs => ($opt_z & 1));
 $f->out_classes($outfh);
 $f->endtable($outfh);
+$f->normal_rules($outfh, $opt_n) if ($opt_n);
+$f->lig_rules($outfh, $opt_s, $opt_l) if ($opt_l);
 $f->end_gdl($outfh, $opt_i);
 
 $outfh->close();

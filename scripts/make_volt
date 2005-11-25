@@ -1,19 +1,60 @@
+#!/usr/bin/perl
+use Font::TTF::Font;
 use Font::Scripts::Volt;
 use Getopt::Std;
 
-getopts('t');
+getopts('a:i:l:t');
 
-$f = Font::Scripts::Volt->read_font($ARGV[1], $ARGV[0]) || die "Can't read font information";
+unless ($ARGV[0])
+{
+    die <<'EOT';
+    make_volt [-a file] [-l ligtype] [-i file] infile outfile
+    make_volt -t [-a file] [-l ligtype] [-i file] infile
+Creates a copy of the infile font file adding a VOLT table to it.
 
-$f->make_classes;
-$res = $f->out_volt;
+  -a file       Attachment Point database .xml file
+  -i fontfile   merge VOLT table from this font or text file
+  -l type       type =
+                    first - class name is first code, contents other codes
+                    last  - class name is last code, contents other codes
+                    firstcomp - treat extensions as part of elements, as first
+                    lastcomp - treat extensons as part of elements, as last
+  -t            output volt code to stdout and don't generate a font file
+EOT
+}
 
-$res =~ s/\n/\r/og;
-$res .= "\000" x 7;
+$f = Font::Scripts::Volt->read_font($ARGV[0], $opt_a) || die "Can't read font information";
+
+$comp = $1 if ($opt_l =~ s/(comp)$//o);
+
+$f->make_classes(-ligatures => $opt_l, -ligtype => $comp);
+if ($opt_i)
+{
+    my ($fh, $dat, @map);
+    if ($fh = Font::TTF::Font->open($opt_i))
+    {
+        $vtext = $fh->{'TSIV'}->read->{' dat'};
+    }
+    elsif ($fh = IO::File->new("< $opt_i"))
+    {
+        $vtext = join('', <$fh>);
+        $fh->close();
+    }
+    else
+    { die "Can't open $opt_i as a font or text file"; }
+
+    $dat = $f->parse_volt($vtext) || die "VOLT code failed to parse";
+    @map = $f->align_glyphs($dat);
+    $f->merge_volt($dat, \@map);
+}
+$res = $f->out_volt(-ligatures => $opt_l);
+
 if ($opt_t)
 { print $res; }
 else
-{    
+{
+    $res =~ s/\n/\r/og;
+    $res .= "\000" x 7;
     $f->{'font'}{'TSIV'} = Font::TTF::Table->new(dat => $res, PARENT => $f->{'font'});
-    $f->{'font'}->out($ARGV[2]);
+    $f->{'font'}->out($ARGV[1]);
 }

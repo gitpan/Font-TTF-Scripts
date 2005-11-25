@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 use Config;
 use IO::File;
 
-$VERSION = "0.3";
+$VERSION = "0.5";
 
 $fversion = $VERSION;
 $fversion =~ s/\./_/og;
@@ -10,12 +10,10 @@ $fversion =~ s/\./_/og;
 # incantation to enable MY::pm_to_blib later on
 push(@ExtUtils::MakeMaker::Overridable, qw(pm_to_blib)) if ($^O eq 'MSWin32');
 
-@scripts = grep {-f && !m/\./o } glob("scripts/*");
-@theselibs = grep {-f } glob("lib/Font/Scripts/*");
+@scripts = grep {-f && !m/\./o && !m/~$/o } glob("scripts/*");
+@scripts = grep {!m|/add|oi} @scripts unless ($^O eq 'MSWin32');
 
-# we do this to avoid installing Make.pm
-%pms = map { my ($v) = $_; $v =~ s/^lib/\$(INST_LIB)/o; $_ => $v; }
-    (glob("lib/Font/Scripts/*.pm"));
+@theselibs = grep {-f } glob("lib/Font/Scripts/*");
 
 $perlbin = $Config{'bin'};
 $fhi = IO::File->new("< FontUtils.isb") || die "Can't find FontUtils.isb";
@@ -41,8 +39,13 @@ WriteMakefile (
 #        HTMLSCRIPTPODS => {map {my $t=$_; $t=~s/\..*?$/.html/o; $t='blib/Html/'.$t; $_ => $t;} @scripts},
         AUTHOR => "martin_hosken\@sil.org",
         ABSTRACT => "TTF font support scripts for Perl",
-        PM => {%pms},
-        dist => { 'TO_UNIX' => 'perl -Mtounix -e "tounix(\"$(DISTVNAME)\")"' }
+        dist => { 'TO_UNIX' => 'perl -Mtounix -e "tounix(\"$(DISTVNAME)\")"' },
+		PREREQ_PM => {
+			'Algorithm::Diff' => 0,
+			'Font::TTF::Font' => 0.36,
+			'Text::PDF::File' => 0,
+			'Parse::RecDescent' => 1.51
+			}
     );
 
 if ($^O eq 'MSWin32') {
@@ -95,10 +98,20 @@ EOT
     $fh->close();
     
     push (@scripts, "addbats.pl");
+
+	if ($^O eq 'MSWin32')
+	{
+		require Win32::TieRegistry;
+		Win32::TieRegistry->import (Delimiter=>"/") ;
+		$compile = $Registry->{'Classes/InnoSetupScriptFile/shell/Compile/command//'};
+		$compile =~ s/\s*"?%1"?.*$//;
+		$compile = "start \"compile\" /wait $compile";
+	}
+
     $res .= "exe : TTFontUtils_$fversion.exe\n\n";
 
     $res .= "TTFontUtils_$fversion.exe : scripts\\fontutils.par\n";
-    $res .= "\t\\progs\\inno_setup\\compil32.exe /cc FontUtils.iss\n\n";
+    $res .= "\t$compile FontUtils.iss\n\n";
     
     $res .= "scripts\\fontutils.par : ";
     $res .= join(' ', @scripts);
