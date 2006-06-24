@@ -1,13 +1,13 @@
-package Font::Scripts::AP;
+package Font::TTF::Scripts::AP;
 
 =head1 NAME
 
-Font::Scripts::AP - Memory representation of a L<TTFBuilder|bin::TTFBuilder> Attachment Point database (APDB)
+Font::TTF::Scripts::AP - Memory representation of a L<TTFBuilder|bin::TTFBuilder> Attachment Point database (APDB)
 
 =head1 SYNOPSIS
 
- use Font::Scripts::AP;
- $ap = Font::Scripts::AP->read_font($ttf_file, $ap_file, %opts);
+ use Font::TTF::Scripts::AP;
+ $ap = Font::TTF::Scripts::AP->read_font($ttf_file, $ap_file, %opts);
  $ap->make_classes();
 
 =head1 INSTANCE VARIABLES
@@ -170,7 +170,7 @@ use vars qw($VERSION);
 
 $VERSION = "0.06";  # MH    debug glyph alternates for ligature creation, add Unicode
 # $VERSION = "0.05";  # MH    add glyph alternates e.g. A/u0410 and ligature class creation
-#$VERSION = "0.04";	# BH   in progress
+# $VERSION = "0.04";	# BH   in progress
 # Merged my AP.pm with MH's version:
 #	Rename _error() to error()
 #	Added -errorfh support
@@ -187,7 +187,7 @@ $VERSION = "0.06";  # MH    debug glyph alternates for ligature creation, add Un
 					#					list of attachment points to be ignored.
 
 
-=head2 $ap = Font::Scripts::AP->read_font ($ttf_file, $ap_file, %opts)
+=head2 $ap = Font::TTF::Scripts::AP->read_font ($ttf_file, $ap_file, %opts)
 
 Reads the TrueType font file C<$ttf_file> and the attachment point database (APDB) file
 C<$ap_file>, and builds a structure to represent the APDB.
@@ -417,7 +417,7 @@ sub read_font
 First, for every glyph record in C<glyphs>, C<make_classes> invokes C<make_name>  
 followed by, for every attachment point record in C<points>, C<make_point> . This 
 gives sub-classes a chance to convert the names (of glyphs and points) to an alternate form 
-(e.g., as might be useful in building Graphite source.) See L<GDL.pm|Font::Scripts::GDL> for
+(e.g., as might be useful in building Graphite source.) See L<GDL.pm|Font::TTF::Scripts::GDL> for
 an example.
 
 C<make_classes> then builds the C<classes> and C<lists> instance variables, and
@@ -480,7 +480,7 @@ sub make_classes
         {
             if ($name =~ m/\.([^_.]+)$/o)
             {
-                my ($base, $ext) = ($` , $1);
+                my ($base, $ext) = ($` , $1);    #` make editor happy
                 next unless ($i = $namemap{$base});
                 push (@{$classes{$ext}}, $glyph->{'gnum'});
                 push (@{$classes{"no_$ext"}}, $self->{'glyphs'}[$i]{'gnum'});

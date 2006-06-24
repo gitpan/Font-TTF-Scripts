@@ -6,20 +6,23 @@ Examples/symbol.rmp
 Examples/ttfaddname.plx
 Examples/ttfdeltable.plx
 Examples/ttfenc.plx
+Examples/TTFExtractTable.plx
+Examples/TTFReplaceTable.plx
 Examples/ttfwidth.plx
 Examples/ttunadopter.plx
+Examples/volt2volt
 Examples/xmldump.plx
 Examples/zerohyph.plx
 FontUtils.isb
 lib/Font/Fret.pm
-lib/Font/Scripts/AP.pm
-lib/Font/Scripts/GDL.pm
-lib/Font/Scripts/GDL_old.pm
-lib/Font/Scripts/Thai.pm
-lib/Font/Scripts/Volt.pm
+lib/Font/TTF/Scripts.pod
+lib/Font/TTF/Scripts/AP.pm
+lib/Font/TTF/Scripts/GDL.pm
+lib/Font/TTF/Scripts/GDL_old.pm
+lib/Font/TTF/Scripts/Thai.pm
+lib/Font/TTF/Scripts/Volt.pm
 Makefile.PL
 MANIFEST			This list of files
-META.yml
 scripts/addfont
 scripts/addpath
 scripts/check_attach
@@ -41,3 +44,4 @@ scripts/volt2xml
 scripts/voltExportAnchors
 scripts/voltFixup
 scripts/voltImportAnchors
+META.yml                                 Module meta-data (added by MakeMaker)

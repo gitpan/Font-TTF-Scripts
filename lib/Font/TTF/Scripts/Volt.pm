@@ -1,17 +1,17 @@
-package Font::Scripts::Volt;
+package Font::TTF::Scripts::Volt;
 
 use Parse::RecDescent;
 use Algorithm::Diff qw(sdiff);
 use Font::TTF::Font;
-use Font::Scripts::AP;
+use Font::TTF::Scripts::AP;
 
 use strict;
 use vars qw($VERSION @ISA %dat $volt_grammar $volt_parser);
-@ISA = qw(Font::Scripts::AP);
+@ISA = qw(Font::TTF::Scripts::AP);
 
 $VERSION = "0.02";  # MJPH   9-AUG-2005     Add support for glyph alternates
 # $VERSION = "0.01";  # MJPH  26-APR-2004     Original based on existing code
-*read_font = \&Font::Scripts::AP::read_font;
+*read_font = \&Font::TTF::Scripts::AP::read_font;
 
 sub out_volt
 {
@@ -55,7 +55,7 @@ sub out_volt_glyphs
         { $type = $g->{'type'} || 'BASE'; }
         
         $res .= " TYPE $type" if ($type);
-        $res .= " COMPONENTS $g->{'components'}" if ($g->{'components'});
+        $res .= " COMPONENTS " . scalar@{$g->{'components'}} if ($g->{'components'});
         $res .= " END_GLYPH\n";
     }
     $res;
@@ -200,11 +200,12 @@ sub out_volt_lookups
     foreach $c (sort keys %{$self->{'lists'}})
     {
         next if ($c =~ m/^_/o);
+        next unless (defined $self->{'lists'}{"_$c"});
 
         $res .= "DEF_LOOKUP \"base_$c\" PROCESS_BASE PROCESS_MARKS ALL DIRECTION LTR\n";
         $res .= "IN_CONTEXT\nEND_CONTEXT\nAS_POSITION\n";
         $res .= "ATTACH GROUP \"cTakes${c}Dia\"\n";
-        $res .= "TO GROUP \"c_${c}Dia\" AT ANCHOR \"$c\"\n";
+        $res .= "TO GROUP \"c${c}Dia\" AT ANCHOR \"$c\"\n";
         $res .= "END_ATTACH\nEND_POSITION\n";
     }
 
@@ -316,7 +317,10 @@ sub out_volt_anchors
         $k = $glyph->{'name'};
         foreach $i (sort keys %{$glyph->{'points'}})
         {
-            $res .= "DEF_ANCHOR \"$i\" ON $glyph->{'gnum'} GLYPH $k COMPONENT 1 " .
+            my ($m) = $i;
+            $m =~ s/^_/MARK_/o;
+
+            $res .= "DEF_ANCHOR \"$m\" ON $glyph->{'gnum'} GLYPH $k COMPONENT 1 " .
                     "AT POS DX $glyph->{'points'}{$i}{'x'} DY $glyph->{'points'}{$i}{'y'} END_POS " .
                     "END_ANCHOR\n";
         }
@@ -558,6 +562,8 @@ $volt_grammar = <<'EOG';
     num : /-?\d+/
         { $return = $item[1]; }
 EOG
+
+#" to keep editors happy
 
 sub parse_volt
 {
