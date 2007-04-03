@@ -168,7 +168,8 @@ use XML::Parser::Expat;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = "0.06";  # MH    debug glyph alternates for ligature creation, add Unicode
+$VERSION = "0.07";  # MH    add make_names if you don't want make_classes
+# $VERSION = "0.06";  # MH    debug glyph alternates for ligature creation, add Unicode
 # $VERSION = "0.05";  # MH    add glyph alternates e.g. A/u0410 and ligature class creation
 # $VERSION = "0.04";	# BH   in progress
 # Merged my AP.pm with MH's version:
@@ -236,6 +237,7 @@ sub read_font
 
     $self->{'font'} = $f;
     $self->{'cmap'} = $f->{'cmap'}->find_ms->{'val'} || die "Can't find Unicode table in font $fname";
+    my (@reverse) = $f->{'cmap'}->reverse('array' => 1);
 
     $xml = XML::Parser::Expat->new();
     $xml->setHandlers('Start' => sub {
@@ -276,6 +278,8 @@ sub read_font
                 # delete $attrs{'GID'}; # Added in MH's version; v0.04: now believed un-needed and un-wanted.
             }
             $cur_glyph->{'post'} = $f->{'post'}{'VAL'}[$cur_glyph->{'gnum'}];
+            $cur_glyph->{'uni'} = $reverse[$cur_glyph->{'gnum'}] if (!defined $cur_glyph->{'uni'} && defined $reverse[$cur_glyph->{'gnum'}]);
+            $cur_glyph->{'PSName'} = $cur_glyph->{'post'} if ($cur_glyph->{'post'} && $cur_glyph->{'post'} ne '.notdef');
 
             if ($cur_glyph->{'glyph'} = $f->{'loca'}{'glyphs'}[$cur_glyph->{'gnum'}])
             {
@@ -380,36 +384,62 @@ sub read_font
         $xml->release;
         undef $xml;
     }
-    else        # read it all from the font
-    {
-        my (@reverse) = $f->{'cmap'}->reverse('array' => 1);
-        my ($numg) = $f->{'maxp'}{'numGlyphs'};
-        my ($i);
 
-        for ($i = 0; $i < $numg; $i++)
+# now fill in the glyphs that aren't in the xml
+    my ($numg) = $f->{'maxp'}{'numGlyphs'};
+    my ($i);
+
+    for ($i = 0; $i < $numg; $i++)
+    {
+        next if (defined $self->{'glyphs'}[$i]);
+
+        my ($cur_glyph) = {'gnum' => $i};
+        $cur_glyph->{'uni'} = $reverse[$i] if (defined $reverse[$i]);
+        $cur_glyph->{'post'} = $f->{'post'}{'VAL'}[$i];
+        $cur_glyph->{'PSName'} = $cur_glyph->{'post'} if ($cur_glyph->{'post'} && $cur_glyph->{'post'} ne '.notdef');
+        $self->{'glyphs'}[$i] = $cur_glyph;
+        if ($cur_glyph->{'glyph'} = $f->{'loca'}{'glyphs'}[$i])
         {
-            my ($cur_glyph) = {'gnum' => $i};
-            $cur_glyph->{'uni'} = $reverse[$i] if (defined $reverse[$i]);
-            $cur_glyph->{'post'} = $f->{'post'}{'VAL'}[$i];
-            $cur_glyph->{'PSName'} = $cur_glyph->{'post'} if ($cur_glyph->{'post'} && $cur_glyph->{'post'} ne '.notdef');
-            $self->{'glyphs'}[$i] = $cur_glyph;
-            if ($cur_glyph->{'glyph'} = $f->{'loca'}{'glyphs'}[$i])
-            {
-                # v0.04: Slight difference in this code and MH's: this code causes
-                # $cur_glyph->{'glyph'} to be defined for all glyphs; in MH's code
-                # it was defined only for non-empty glyphs.
-                $cur_glyph->{'glyph'}->read_dat;
-                if ($cur_glyph->{'glyph'}{'numberOfContours'} > 0)
-                { $cur_glyph->{'props'}{'drawn'} = 1; }
-                $cur_glyph->{'glyph'}->get_points;
-            }
-            else
-            {
-                $self->error($xml, $cur_glyph, undef, "No glyph outline in font") unless $known_empty_glyphs{$cur_glyph->{'post'}};
-            }
+            # v0.04: Slight difference in this code and MH's: this code causes
+            # $cur_glyph->{'glyph'} to be defined for all glyphs; in MH's code
+            # it was defined only for non-empty glyphs.
+            $cur_glyph->{'glyph'}->read_dat;
+            if ($cur_glyph->{'glyph'}{'numberOfContours'} > 0)
+            { $cur_glyph->{'props'}{'drawn'} = 1; }
+            $cur_glyph->{'glyph'}->get_points;
+        }
+        else
+        {
+            $self->error($xml, $cur_glyph, undef, "No glyph outline in font") unless $known_empty_glyphs{$cur_glyph->{'post'}};
         }
     }
     $self;
+}
+
+=head2 $ap->make_names
+
+Create name records for all the glyphs in the font
+
+=cut
+
+sub make_names
+{
+    my ($self) = @_;
+    my ($f) = $self->{'font'};
+    my ($numg) = $f->{'maxp'}{'numGlyphs'};
+    my ($i, $gname);
+
+    for ($i = 0; $i < $numg; $i++)
+    {
+        my ($glyph) = $self->{'glyphs'}[$i];
+        next if (defined $glyph->{'name'});
+        $gname = $self->make_name($glyph->{'post'}, $glyph->{'uni'}, $glyph);
+
+        while (defined $self->{'glyph_names'}{$gname})
+        { $gname =~ s/(?:_(\d+))$/"_".($1+1)/oe; }
+        $self->{'glyph_names'}{$gname} = $i;
+        $glyph->{'name'} = $gname;
+    }
 }
 
 =head2 $ap->make_classes (%opts)
@@ -478,12 +508,15 @@ sub make_classes
     {
         foreach $name (split('/', $glyph->{'post'}))
         {
-            if ($name =~ m/\.([^_.]+)$/o)
+            if ($name =~ m/\.([^_.]+)$/o)   # in x.y.z just handle x.y,.z since x,.y will be done
+                                            # when processing x.y, etc.
             {
                 my ($base, $ext) = ($` , $1);    #` make editor happy
-                next unless ($i = $namemap{$base});
-                push (@{$classes{$ext}}, $glyph->{'gnum'});
-                push (@{$classes{"no_$ext"}}, $self->{'glyphs'}[$i]{'gnum'});
+                if ($i = $namemap{$base})
+                {
+                    push (@{$classes{$ext}}, $glyph->{'gnum'});
+                    push (@{$classes{"no_$ext"}}, $self->{'glyphs'}[$i]{'gnum'});
+                }
             }
         }
     }
@@ -497,19 +530,19 @@ sub make_classes
         {
             foreach $name (split('/', $glyph->{'post'}))
             {
-                my ($base, $class, $cname);
-                my ($ext, @elem) = $self->split_lig($name, $opts{'-ligtype'});
+                my ($class, $cname);
+                my ($ext, $base, @elem) = $self->split_lig($name, $opts{'-ligatures'}, $opts{'-ligtype'});
                 next if ($ext || scalar @elem < 2);
 
                 if ($opts{'-ligatures'} eq 'first')
                 { 
-                    ($base, $class) = (join('', @elem[1..$#elem]), $elem[0]);
+                    $class = $elem[0];
                     $base = "uni$base" if ($class =~ s/^uni//o);
                     $base =~ s/^_//o;
                 }
                 else
                 { 
-                    ($base, $class) = (join('', @elem[0..($#elem-1)]), $elem[-1]);
+                    $class = $elem[-1];
                     $class =~ s/^_//o;
                 }
 
@@ -570,29 +603,39 @@ sub make_point
     $p;
 }
 
-# Private routine:
+# Private routine:'
 
 sub split_lig
 {
-    my ($self, $str, $type) = @_;
-    my ($ext, @res);
+    my ($self, $str, $type, $comp) = @_;
+    my ($ext, @res, $base);
+
+    unless ($comp =~ /comp/)
+    { $ext = $1 if ($str =~ s/(\.(.*?))$//o); }
 
     if ($str =~ m/_/o)
     {
-        unless ($type eq 'comp')
-        {
-            $ext = $1 if ($str =~ s/(\.(.*?))$//o);
-        }
         @res = split('_', $str);
         foreach (@res[1..$#res])
         { $_ = "_$_"; }
+        $base = $str;
+        if ($type =~ /last/)
+        { $base =~ s/_(.*?)$//o; }
+        else
+        { $base =~ s/^(.*?)_//o; }
     }
     elsif ($str =~ s/^uni//o)
     {
         @res = $str =~ m/([0-9a-fA-F]{4})/og;
         $res[0] = "uni$res[0]";
+        if ($type =~ /last/)
+        { $base = "uni" . join('', @res[0 .. ($#res-2)]); }
+        else
+        { $base = "uni" . join('', @res[1 .. ($#res-1)]); }
     }
-    ($ext, @res);
+    else
+    { $res[0] = $str; }
+    ($ext, $base, @res);
 }
 
 sub error
@@ -616,7 +659,8 @@ sub error
     if (defined $cur_pt)
     { $msg .=  " in point $cur_pt->{'name'}"; }
 
-    $msg .=  " at line " . $xml->current_line . ".\n";
+    $msg .=  " at line " . $xml->current_line if ($xml);
+    $msg .= ".\n";
 
     if (defined $self->{'-errorfh'})
     { print {$self->{'-errorfh'}} $msg; }

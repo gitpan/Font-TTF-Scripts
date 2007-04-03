@@ -11,7 +11,16 @@ use vars qw($VERSION @ISA %dat $volt_grammar $volt_parser);
 
 $VERSION = "0.02";  # MJPH   9-AUG-2005     Add support for glyph alternates
 # $VERSION = "0.01";  # MJPH  26-APR-2004     Original based on existing code
-*read_font = \&Font::TTF::Scripts::AP::read_font;
+# *read_font = \&Font::TTF::Scripts::AP::read_font;
+
+sub read_font
+{
+    my ($self) = Font::TTF::Scripts::AP::read_font(@_);
+
+    $self->{'glyphs'}[0]{'post'} = 'glyph0';        # hack to make volt happy, not sure why
+    $self;
+}
+
 
 sub out_volt
 {
@@ -163,37 +172,49 @@ sub out_volt_lookups
     foreach $c (sort keys %{$self->{'classes'}})
     {
         next if ($c =~ m/^no_/o);
+        next if (grep {$_->{'id'} eq $c} @{$self->{'lookups'}});
 
         $res .= "DEF_LOOKUP \"$c\" PROCESS_BASE PROCESS_MARKS ALL DIRECTION LTR\n";
         $res .= "IN_CONTEXT\nEND_CONTEXT\nAS_SUBSTITUTION\n";
-        for ($i = 0; $i < scalar @{$self->{'classes'}{$c}}; $i++)
-        {
-            $res .= "SUB GLYPH \"" .($glyphs->[$self->{'classes'}{"no_$c"}[$i]]{'name'}) . "\"\n";
-            $res .= "WITH GLYPH \"$glyphs->[$self->{'classes'}{$c}[$i]]{'name'}\"\n";
-            $res .= "END_SUB\n";
-        }
+
+        $res .= "SUB GROUP \"cno_$c\"\n";
+        $res .= "WITH GROUP \"c$c\"\n";
+        $res .= "END_SUB\n";
+#        for ($i = 0; $i < scalar @{$self->{'classes'}{$c}}; $i++)
+#        {
+#            $res .= "SUB GLYPH \"" .($glyphs->[$self->{'classes'}{"no_$c"}[$i]]{'name'}) . "\"\n";
+#            $res .= "WITH GLYPH \"$glyphs->[$self->{'classes'}{$c}[$i]]{'name'}\"\n";
+#            $res .= "END_SUB\n";
+#        }
         $res .= "END_SUBSTITUTION\n";
     }
 
     foreach $c (sort keys %{$self->{'ligclasses'}})
     {
         next if ($c =~ m/^no_/o);
+        next if (grep {$_->{'id'} eq "l$c"} @{$self->{'lookups'}});
 
         my ($bnum) = $self->{'ligmap'}{$c};
 
         $res .= "DEF_LOOKUP \"l$c\" PROCESS_BASE PROCESS_MARKS ALL DIRECTION LTR\n";
         $res .= "IN_CONTEXT\nEND_CONTEXT\nAS_SUBSTITUTION\n";
-        for ($i = 0; $i < scalar @{$self->{'ligclasses'}{$c}}; $i++)
-        {
-            my ($gname) = $glyphs->[$self->{'ligclasses'}{"no_$c"}[$i]]{'name'};
-
-            if ($ligtype eq 'first')
-            { $res .= "SUB GLYPH \"$glyphs->[$bnum]{'name'}\" GLYPH \"$gname\"\n"; }
-            else
-            { $res .= "SUB GLYPH \"$gname\" GLYPH \"$glyphs->[$bnum]{'name'}\"\n"; }
-            $res .= "WITH GLYPH \"$glyphs->[$self->{'ligclasses'}{$c}[$i]]{'name'}\"\n";
-            $res .= "END_SUB\n";
-        }
+        if ($ligtype eq 'first')
+        { $res .= "SUB GLYPH \"$glyphs->[$bnum]{'name'}\" GROUP \"no_$c\"\n"; }
+        else
+        { $res .= "SUB GROUP \"clno_$c\" GLYPH \"$glyphs->[$bnum]{'name'}\"\n"; }
+        $res .= "WITH GROUP \"cl$c\"\n";
+        $res .= "END_SUB\n";
+#        for ($i = 0; $i < scalar @{$self->{'ligclasses'}{$c}}; $i++)
+#        {
+#            my ($gname) = $glyphs->[$self->{'ligclasses'}{"no_$c"}[$i]]{'name'};
+#
+#            if ($ligtype eq 'first')
+#            { $res .= "SUB GLYPH \"$glyphs->[$bnum]{'name'}\" GLYPH \"$gname\"\n"; }
+#            else
+#            { $res .= "SUB GLYPH \"$gname\" GLYPH \"$glyphs->[$bnum]{'name'}\"\n"; }
+#            $res .= "WITH GLYPH \"$glyphs->[$self->{'ligclasses'}{$c}[$i]]{'name'}\"\n";
+#            $res .= "END_SUB\n";
+#        }
         $res .= "END_SUBSTITUTION\n";
     }
 
@@ -213,11 +234,11 @@ sub out_volt_lookups
     {
         my ($q, $t, $s);
         my ($id) = $l->{'id'};
-        next if ((defined $self->{'lists'}{$id} && $id !~ m/^_/o)
-            || (defined $self->{'classes'}{$id} && $id !~ m/^no_/o));
+#        next if ((defined $self->{'lists'}{$id} && $id !~ m/^_/o)
+#            || (defined $self->{'classes'}{$id} && $id !~ m/^no_/o));
 
         my ($t) = $id;
-        next if ($t =~ s/^l//o && defined $self->{'ligclasses'}{$t});
+#        next if ($t =~ s/^l//o && defined $self->{'ligclasses'}{$t});
         $res .= "DEF_LOOKUP \"$id\"";
         foreach $q (qw(base marks all dir))
         {
@@ -568,7 +589,7 @@ EOG
 sub parse_volt
 {
     my ($self, $vtext) = @_;
-    my ($font) = $self->{'font'};
+    my ($font) = $self->{'font'} if (ref $self);
 
     $vtext = $font->{'TSIV'}->read->{' dat'} unless ($vtext);
     $volt_parser = new Parse::RecDescent ($volt_grammar) unless ($volt_parser);

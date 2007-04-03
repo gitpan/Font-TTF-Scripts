@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 use Config;
 use IO::File;
 
-$VERSION = "0.7";
+$VERSION = "0.8";
 
 $fversion = $VERSION;
 $fversion =~ s/\./_/og;
@@ -45,7 +45,7 @@ WriteMakefile (
         ABSTRACT => "TTF font support scripts for Perl",
 		PREREQ_PM => {
 			'Algorithm::Diff' => 0,
-			'Font::TTF::Font' => 0.36,
+			'Font::TTF' => 0.41,
 			'Text::PDF::File' => 0,
 			'Parse::RecDescent' => 1.51
 			},
