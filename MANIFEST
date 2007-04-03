@@ -1,13 +1,8 @@
 doc/make_smart.odp
 Examples/addpclt.plx
-Examples/cp1252.xml
 Examples/makemono.plx
-Examples/Padauk.xml
 Examples/StripCmap.plx
 Examples/symbol.rmp
-Examples/temp.ttf
-Examples/temp.xml
-Examples/tmon.out
 Examples/ttfaddname.plx
 Examples/ttfcopy
 Examples/ttfdeltable.plx
