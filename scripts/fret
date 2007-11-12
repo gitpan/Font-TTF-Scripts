@@ -58,6 +58,7 @@ sub make_cids
         $xml->parsefile($ARGV[2]) || die "Can't parse $ARGV[2]";
     }
 
+    @rev = $font->{'cmap'}->read->reverse('array' => 1);
     @map = $font->{'cmap'}->read->reverse;
     $map[$font->{'maxp'}{'numGlyphs'}] = 0;
     foreach $m (@map) { $m = 65536 if $m == 0; }
@@ -67,13 +68,24 @@ sub make_cids
     return ("Glyph ID", @res);
 }
 
+sub boxhdr
+{
+    return ("Advance", "PSName", "GID", "Unicode");
+}
+
 sub lowdat
 {
     my ($class, $cid, $gid, $glyph, $uid, $font) = @_;
 
-    return ($font->{'hmtx'}{'advance'}[$gid], "r|$macrev[$gid]");
+    return ($font->{'hmtx'}{'advance'}[$gid], "r|$font->{'post'}{'VAL'}[$gid]");
 }
 
+sub topdat
+{
+    my ($class, $cid, $gid, $glyph, $uid, $font) = @_;
+
+    return ($gid, "r,r|" . join(',', map {sprintf("|U+%04X", $_)} sort {$a <=> $b} @{$rev[$gid]}));
+}
 
 sub row1hdr
 {
@@ -83,10 +95,10 @@ sub row1hdr
     for ($i = 0; $i < $font->{'cmap'}{'Num'}; $i++)
     {
         if ($font->{'cmap'}{'Tables'}[$i]{'Platform'} == 1)
-        { @macrev = $font->{'cmap'}->reverse($i); last; }
+        { @macrev = $font->{'cmap'}->reverse('tnum' => $i); last; }
     }
 
-    return ('PSName', 'GID', 'UID',
+    return ('PSName', 'GID', 'UID', 'Macid',
             'r,b|adv', 'r,i|xmax', 'r,i|xmin', 'r,i|ymax', 'r,i|ymin');
 }
 
@@ -96,7 +108,8 @@ sub row1
     my ($aw) = $font->{'hmtx'}{'advance'}[$gid];
     my ($rsb) = $aw - $glyph->{'xMax'};
 
-    return ($font->{'post'}{'VAL'}[$gid], $gid, sprintf("x%04X", $uid),
+    return ($font->{'post'}{'VAL'}[$gid], $gid, 
+            join(',', map {sprintf("|U+%04X", $_)} sort {$a <=> $b} @{$rev[$gid]}), $macrev[$gid],
             "r,b|$aw", "r,i|$glyph->{'xMax'}",
             "r,i|$glyph->{'xMin'}", "r,i|$glyph->{'yMax'}",
             "r,i|$glyph->{'yMin'}");
@@ -140,7 +153,7 @@ FRET - Font REporting Tool
 
 =head1 SYNOPSIS
 
-  FRET [-f] [-g] [-s size] [-p package] [-q] font_file [out_file] [ap.xml]
+  FRET [-f] [-g] [-r] [-s size] [-p package] [-q] font_file [out_file] [ap.xml]
 Generates a report on a font according to a particular package. In some
 contexts the package may be over-ridden. Paper size may also be specified.
 
@@ -156,7 +169,8 @@ if present)
   -m points     Sets glyph size in the box regardless of what is calculated
                 Regardless of the consequences for clashes
   -p package    Perl package specification to use for report information
-  -q            quiet mode  
+  -q            quiet mode
+  -r            Don't output report lines, fill the page with glyph boxes
   -s size       paper size: a4, ltr, legal
 
 =head1 DESCRIPTION

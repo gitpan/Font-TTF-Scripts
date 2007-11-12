@@ -489,7 +489,7 @@ sub make_classes
 
         foreach $p (keys %{$glyph->{'points'}})
         {
-            my ($pname) = $self->make_point($p, $glyph);
+            my ($pname) = $self->make_point($p, $glyph, %opts);
             next unless ($pname);                           # allow for point deletion, in effect.
             if ($p ne $pname)
             {
@@ -599,7 +599,7 @@ By default this returns $pname, but the function could be overridden when subcla
 
 sub make_point
 {
-    my ($self, $p, $glyph) = @_;
+    my ($self, $p, $glyph, %opts) = @_;
     $p;
 }
 
@@ -627,11 +627,11 @@ sub split_lig
     elsif ($str =~ s/^uni//o)
     {
         @res = $str =~ m/([0-9a-fA-F]{4})/og;
-        $res[0] = "uni$res[0]";
         if ($type =~ /last/)
-        { $base = "uni" . join('', @res[0 .. ($#res-2)]); }
+        { $base = "uni" . join('', @res[0 .. ($#res-1)]); }
         else
-        { $base = "uni" . join('', @res[1 .. ($#res-1)]); }
+        { $base = "uni" . join('', @res[1 .. $#res]); }
+        $res[0] = "uni$res[0]";
     }
     else
     { $res[0] = $str; }
