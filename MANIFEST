@@ -16,6 +16,7 @@ Examples/ttfname-old.pl
 Examples/ttfpuaspare.pl
 Examples/ttfreplacetable.pl
 Examples/ttfstripgraphite.pl
+Examples/ttfstriphints.pl
 Examples/ttfunadopter.pl
 Examples/ttfwidth.pl
 Examples/volt2volt.pl
@@ -59,3 +60,9 @@ scripts/ttfsetver
 scripts/ttftable
 scripts/volt2ap
 scripts/volt2ttf
+t/base/testfont.pdf
+t/base/ttfnamed.ttf
+t/fret.t
+t/OFL.txt
+t/testfont.ttf
+t/ttfname.t
