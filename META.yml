@@ -6,7 +6,7 @@ version_from:
 installdirs:  site
 requires:
     Algorithm::Diff:               0
-    Font::TTF:                     0.42
+    Font::TTF:                     0.43
     Parse::RecDescent:             1.51
     Text::PDF::File:               0
 
