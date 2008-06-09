@@ -24,7 +24,6 @@ Reference to a L<font|Font::TTF::Font> structure. C<read_font> will cause at lea
 the L<post|Font::TTF::Post>, L<cmap|Font::TTF::Cmap>, L<loca|Font::TTF::Loca>, and 
 L<name|Font::TTF::Name> tables to be read in.
 
-
 =item glyphs
 
 An array of references to glyph data structures, indexed by glyphID. Stucture elements are:
@@ -33,7 +32,7 @@ An array of references to glyph data structures, indexed by glyphID. Stucture el
 
 =item uni
 
-Unicode scalar value, if any, as specified in the APDB. (decimal integer)
+Array of Unicode scalar values (decimal integers), if any, that map from cmap to this glyph. 
 
 =item gnum
 
@@ -42,6 +41,10 @@ Actual glyph ID from font.
 =item post
 
 Actual Postscript name from font.
+
+=item name
+
+This element is set by L</"make_names"> or L</"make_classes"> and is the replacement name returned by L</"make_name">.
 
 =back
 
@@ -96,6 +99,10 @@ comma separated list of bounding box coordinates, i.e., C<x1, y1, x2, y2>
 
 Unicode scalar value, if any, of the component. (decimal integer)
 
+=item line
+
+Line number in APDB where this component is defined.
+
 =back
 
 =back
@@ -146,7 +153,7 @@ each bit set to 1 if the corresponding glyph has the given attachment point.
 
 =item ligclasses
 
-Optionally created by make_classes if ligatures are requested and they exist. The base forms class is no_I<code> while the ligatures are held in I<code>.
+Optionally created by L</"make_classes"> if ligatures are requested and they exist. The base forms class is no_I<code> while the ligatures are held in I<code>.
 
 =item WARNINGS
 
@@ -168,7 +175,9 @@ use XML::Parser::Expat;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = "0.07";  # MH    add make_names if you don't want make_classes
+$VERSION = "0.09";  # MH  Add classes property support
+# $VERSION = "0.08";  # BH	Generalize values for %opts so can be space- or comma-separated list in a scalar, or can be an array ref.
+# $VERSION = "0.07";  # MH    add make_names if you don't want make_classes
 # $VERSION = "0.06";  # MH    debug glyph alternates for ligature creation, add Unicode
 # $VERSION = "0.05";  # MH    add glyph alternates e.g. A/u0410 and ligature class creation
 # $VERSION = "0.04";	# BH   in progress
@@ -199,7 +208,8 @@ Options that may be supplied throught the C<%opts> hash include:
 
 =item -omittedAPs
 
-A comma-separated list of attachment point types to ignore.
+A list of attachment point types to ignore. Can be a string containing comma- or space-separated names,
+or a ref to an array of strings. 
 
 =item -strictap
 
@@ -208,8 +218,10 @@ points on the outline of the glyph.
 
 =item -knownemptyglyphs
 
-A comma-separated list of names of glyphs that are known to have no outline 
-(thus shouldn't generate warning).
+If this option is specified, C<read_font> will warn if glyphs that should have outlines don't.
+The option value should be a list of names of glyphs that are known to have no outline 
+(thus shouldn't generate warning). Can be a string containing comma- or space-separated names,
+or a ref to an array of strings.
 
 =item -errorfh
 
@@ -228,8 +240,9 @@ sub read_font
     bless $self, ref $class || $class;
 
     my (%omittedAPs, %known_empty_glyphs);
-    map {$omittedAPs{$_} = $omittedAPs{"_$_"} = 1} split (',', $opts{'-omittedAPs'});
-    map {$known_empty_glyphs{$_} = 1} split (',', $opts{'-knownemptyglyphs'});
+    map {$omittedAPs{$_} = 1} ( ref ($opts{'-omittedAPs'}) eq 'ARRAY' ? @{$opts{'-omittedAPs'}} : ($opts{'-omittedAPs'} =~m/[^\s,]+/go));
+    map {$omittedAPs{"_$_"} = 1} grep {/^[^_]/} keys %omittedAPs;
+    map {$known_empty_glyphs{$_} = 1} ( ref ($opts{'-knownemptyglyphs'}) eq 'ARRAY' ? @{$opts{'-knownemptyglyphs'}} : ($opts{'-knownemptyglyphs'} =~m/[^\s,]+/go));
 
     $f = Font::TTF::Font->open($fname) || die "Can't open font $fname";
     foreach $t (qw(post cmap loca name))
@@ -238,6 +251,16 @@ sub read_font
     $self->{'font'} = $f;
     $self->{'cmap'} = $f->{'cmap'}->find_ms->{'val'} || die "Can't find Unicode table in font $fname";
     my (@reverse) = $f->{'cmap'}->reverse('array' => 1);
+    my ($numg) = $f->{'maxp'}{'numGlyphs'};
+
+    
+#    my $minUID;
+#    if (exists $f->{'OS/2'})
+#    {
+#    		my $os2 = $f->{'OS/2'}->read || die "Can't read OS/2 table in font $fname";
+#    		$minUID = $os2->{'usFirstCharIndex'};
+#    }
+#	printf STDERR "FirstCharIndex = U+%04X\n", $minUID;
 
     $xml = XML::Parser::Expat->new();
     $xml->setHandlers('Start' => sub {
@@ -251,35 +274,56 @@ sub read_font
 
             if (defined $attrs{'UID'})
             {
+                $attrs{'UID'} =~ s/^U\+//o;      # Not supposed to contain "U+", but some do
                 my ($uni) = hex($attrs{'UID'});
                 $ug = $self->{'cmap'}{$uni};
-                $self->error($xml, $cur_glyph, undef, "No glyph associated with UID $attrs{'UID'}") unless (defined $ug);
-                $cur_glyph->{'gnum'} = $ug;
+                if (defined $ug)
+                {
+                	$cur_glyph->{'gnum'} = $ug;
+                }
+                else
+                {	
+                	$self->APerror($xml, $cur_glyph, undef, "No glyph associated with UID $attrs{'UID'}") ;
+                }
                 $cur_glyph->{'uni'} = [$uni];
                 # delete $attrs{'UID'};  # Added in MH's version; v0.04: now believed un-needed and un-wanted.
             }
             if (defined $attrs{'PSName'})
             {
                 $pg = $f->{'post'}{'STRINGS'}{$attrs{'PSName'}};
-                $self->error($xml, $cur_glyph, undef, "No glyph associated with postscript name $attrs{'PSName'}") unless (defined $pg);
-                $self->error($xml, $cur_glyph, undef, "Postscript name: $attrs{'PSName'} resolves to different glyph to Unicode ID: $attrs{'UID'}")
-                        if (defined $attrs{'UID'} && $pg != $ug);
-                $cur_glyph->{'gnum'} ||= $pg;
+                unless (defined $pg)
+                {
+                	# Failed to find glyph by the supplied PSName -- see if this is one of two special cases.
+                	# These cases exist because FontLab doesn't use the correct (Apple-specified) name for U+000D and U+00A7
+                	$pg = $f->{'post'}{'STRINGS'}{'nonmarkingreturn'} if $attrs{'PSName'} eq 'CR';
+                	$pg = $f->{'post'}{'STRINGS'}{'macron'} 			if $attrs{'PSName'} eq 'overscore';
+                }
+				if (defined $pg)
+				{
+                	$self->APerror($xml, $cur_glyph, undef, "Postscript name: $attrs{'PSName'} resolves to different glyph to Unicode ID: $attrs{'UID'}")
+	                        if (defined $ug && $pg != $ug);
+	                $cur_glyph->{'gnum'} ||= $pg;
+	            }
+                else
+                {
+                	$self->APerror($xml, $cur_glyph, undef, "No glyph associated with postscript name $attrs{'PSName'}") ;
+                }
                 # delete $attrs{'PSName'};  # Added in MH's version; v0.04: now believed un-needed and un-wanted.
             }
             if (defined $attrs{'GID'})
             {
                 $ig = $attrs{'GID'};
-                $self->error($xml, $cur_glyph, undef, "Specified glyph id $attrs{'GID'} different to glyph of Unicode ID: $attrs{'UID'}")
-                        if (defined $attrs{'UID'} && $ug != $ig);
-                $self->error($xml, $cur_glyph, undef, "Specified glyph id $attrs{'GID'} different to glyph of postscript name $attrs{'PSName'}")
-                        if (defined $attrs{'PSName'} && $pg != $ig);
+                $self->APerror($xml, $cur_glyph, undef, "Specified glyph id $attrs{'GID'} different to glyph of Unicode ID: $attrs{'UID'}")
+                        if (defined $ug && $ug != $ig);
+                $self->APerror($xml, $cur_glyph, undef, "Specified glyph id $attrs{'GID'} different to glyph of postscript name $attrs{'PSName'}")
+                        if (defined $pg && $pg != $ig);
+                $self->APerror($xml, $cur_glyph, undef, "Specified glyph id $attrs{'GID'} is >= number of glyphs in font ($numg)")
+                        if ($ig < 0 || $ig >= $numg);
                 $cur_glyph->{'gnum'} ||= $ig;
                 # delete $attrs{'GID'}; # Added in MH's version; v0.04: now believed un-needed and un-wanted.
             }
             $cur_glyph->{'post'} = $f->{'post'}{'VAL'}[$cur_glyph->{'gnum'}];
             $cur_glyph->{'uni'} = $reverse[$cur_glyph->{'gnum'}] if (!defined $cur_glyph->{'uni'} && defined $reverse[$cur_glyph->{'gnum'}]);
-            $cur_glyph->{'PSName'} = $cur_glyph->{'post'} if ($cur_glyph->{'post'} && $cur_glyph->{'post'} ne '.notdef');
 
             if ($cur_glyph->{'glyph'} = $f->{'loca'}{'glyphs'}[$cur_glyph->{'gnum'}])
             {
@@ -291,9 +335,9 @@ sub read_font
                 { $cur_glyph->{'props'}{'drawn'} = 1; }
                 $cur_glyph->{'glyph'}->get_points;
             }
-            else
+            elsif ($opts{'-knownemptyglyphs'})
             {
-                $self->error($xml, $cur_glyph, undef, "No glyph outline in font") unless $known_empty_glyphs{$cur_glyph->{'post'}};
+                $self->APerror($xml, $cur_glyph, undef, "Empty glyph outline in font") unless $known_empty_glyphs{$cur_glyph->{'post'}};
             }
 
             # MH's code includes the following two lines, but these are redundant with 
@@ -306,8 +350,12 @@ sub read_font
 
         } elsif ($tag eq 'compound')
         {
-            my $component = {%attrs};
-            $component->{'uni'} = [hex($attrs{'UID'})] if defined $attrs{'UID'};
+            my $component = {%attrs, line => $xml->current_line};
+            if (defined $attrs{'UID'})
+            {
+                $attrs{'UID'} =~ s/^U\+//o;      # Not supposed to contain "U+", but some do
+                $component->{'uni'} = [hex($attrs{'UID'})] ;
+            }
             push @{$cur_glyph->{'components'}}, $component;
         } elsif ($tag eq 'point')
         {
@@ -323,12 +371,12 @@ sub read_font
             my ($cont) = $attrs{'num'};
             my ($g) = $cur_glyph->{'glyph'} || return;
 
-            $self->error($xml, $cur_glyph, $cur_pt, "Specified contour of $cont different from calculated contour of $cur_pt->{'cont'}")
+            $self->APerror($xml, $cur_glyph, $cur_pt, "Specified contour of $cont different from calculated contour of $cur_pt->{'cont'}")
                     if (defined $cur_pt->{'cont'} && $cur_pt->{'cont'} != $attrs{'num'});
 
             if (($cont == 0 && $g->{'endPoints'}[0] != 0)
                 || ($cont > 0 && $g->{'endPoints'}[$cont-1] + 1 != $g->{'endPoints'}[$cont]))
-            { $self->error($xml, $cur_glyph, $cur_pt, "Contour $cont not a single point path"); }
+            { $self->APerror($xml, $cur_glyph, $cur_pt, "Contour $cont not a single point path"); }
             else
             { $cur_pt->{'cont'} = $cont; }
 
@@ -341,7 +389,7 @@ sub read_font
             my ($g) = $cur_glyph->{'glyph'};
             my ($cont, $i);
 
-            $self->error($xml, $cur_glyph, $cur_pt, "Specified location of ($x, $y) different from calculated location ($cur_pt->{'x'}, $cur_pt->{'y'})")
+            $self->APerror($xml, $cur_glyph, $cur_pt, "Specified location of ($x, $y) different from calculated location ($cur_pt->{'x'}, $cur_pt->{'y'})")
                     if (defined $cur_pt->{'x'} && ($cur_pt->{'x'} != $x || $cur_pt->{'y'} != $y));
 
             if ($g)
@@ -357,15 +405,15 @@ sub read_font
                     }
                 }
                 if ($g->{'x'}[$i] != $x || $g->{'y'}[$i] != $y)
-                { $self->error($xml, $cur_glyph, $cur_pt, "No glyph point at specified location ($x, $y)") if ($opts{'-strictap'}); }
+                { $self->APerror($xml, $cur_glyph, $cur_pt, "No glyph point at specified location ($x, $y)") if ($opts{'-strictap'}); }
                 if (($cont == 0 && $g->{'endPoints'}[0] != 0)
                     || $g->{'endPoints'}[$cont-1] + 1 != $g->{'endPoints'}[$cont])
-                { $self->error($xml, $cur_glyph, $cur_pt, "Calculated contour $cont not a single point path") if ($opts{'-strictap'}); }
+                { $self->APerror($xml, $cur_glyph, $cur_pt, "Calculated contour $cont not a single point path") if ($opts{'-strictap'}); }
                 else
                 { $cur_pt->{'cont'} = $cont; }
             }
             else
-            { $self->error($xml, $cur_glyph, $cur_pt, "No glyph point at specified location ($x, $y)") if ($opts{'-strictap'}); }
+            { $self->APerror($xml, $cur_glyph, $cur_pt, "No glyph point at specified location ($x, $y)") if ($opts{'-strictap'}); }
 
             $cur_pt->{'x'} = $x unless defined $cur_pt->{'x'};
             $cur_pt->{'y'} = $y unless defined $cur_pt->{'y'};
@@ -396,7 +444,6 @@ sub read_font
         my ($cur_glyph) = {'gnum' => $i};
         $cur_glyph->{'uni'} = $reverse[$i] if (defined $reverse[$i]);
         $cur_glyph->{'post'} = $f->{'post'}{'VAL'}[$i];
-        $cur_glyph->{'PSName'} = $cur_glyph->{'post'} if ($cur_glyph->{'post'} && $cur_glyph->{'post'} ne '.notdef');
         $self->{'glyphs'}[$i] = $cur_glyph;
         if ($cur_glyph->{'glyph'} = $f->{'loca'}{'glyphs'}[$i])
         {
@@ -408,9 +455,9 @@ sub read_font
             { $cur_glyph->{'props'}{'drawn'} = 1; }
             $cur_glyph->{'glyph'}->get_points;
         }
-        else
+        elsif ($opts{'-knownemptyglyphs'})
         {
-            $self->error($xml, $cur_glyph, undef, "No glyph outline in font") unless $known_empty_glyphs{$cur_glyph->{'post'}};
+            $self->APerror($xml, $cur_glyph, undef, "Empty glyph outline in font") unless $known_empty_glyphs{$cur_glyph->{'post'}};
         }
     }
     $self;
@@ -418,7 +465,9 @@ sub read_font
 
 =head2 $ap->make_names
 
-Create name records for all the glyphs in the font
+An alternative to L</"make_classes">, this method just creates name records for all the glyphs in the font. 
+That is, for every glyph record in C<glyphs>, L</"make_names"> invokes L</"make_name"> and saves the result 
+in the glyph' sC<name> element.
 
 =cut
 
@@ -501,6 +550,15 @@ sub make_classes
         }
         foreach (split('/', $glyph->{'post'}))
         { $namemap{$_} = $i; }
+        if (defined $glyph->{'props'}{'classes'})
+        {
+            my ($c);
+            foreach $c (split(' ', $glyph->{'props'}{'classes'}))
+            {
+                $c =~ s/^c//o;
+                push (@{$classes{$c}}, $glyph->{'gnum'});
+            }
+        }
     }
 
     # need a separate loop since using other glyphs' names
@@ -584,7 +642,7 @@ sub make_name
 {
     my ($self, $gname, $uni, $glyph) = @_;
     $gname =~ s{/.*$}{}o;           # strip alternates
-    $gname = sprintf("u%04x", $uni) if ($gname eq '.notdef');
+    $gname = defined $uni ? sprintf("u%04x", $uni->[0]) : "glyph$glyph->{'gnum'}" if $gname eq '.notdef';
     $gname;
 }
 
@@ -638,7 +696,7 @@ sub split_lig
     ($ext, $base, @res);
 }
 
-sub error
+sub APerror
 {
     my $self = shift;
     my ($xml, $cur_glyph, $cur_pt, $str) = @_;
@@ -661,7 +719,14 @@ sub error
 
     $msg .=  " at line " . $xml->current_line if ($xml);
     $msg .= ".\n";
+    $self->error($msg);
+}
 
+
+sub error
+{
+    my $self = shift;
+    my $msg = join(' ', @_);
     if (defined $self->{'-errorfh'})
     { print {$self->{'-errorfh'}} $msg; }
     else

@@ -22,27 +22,28 @@ C<Font::TTF::Scripts::Volt> is based on and inherits from C<Font::TTF::Scripts::
 and as such contains all the information in such an object. The read method does
 little beyond calling the corresponding AP method.
 
-The real power in this module is in the Volt parser that can parse Volt source code.
-It does it rather slowly, but it does do it and reads it into an internal format.
-This format can be output and can be merged into an existing font using C<merge_volt>.
-From there it can be output as Volt source. The data structures added represent the
-Volt source.
+The real power in this module is in the C<parse_volt> that can parse Volt source code.
+It does it rather slowly, but it does do it and reads it into an internal data structure.
+This data structure can then be merged into an existing font using C<align_glyphs> and C<merge_volt>.
+From there it can be output as Volt source. The data structure representing the Volt source
+is a hash containing the following elements:
 
 =over 4
 
 =item glyphs
 
-This is shared with the glyphs array from AP but adds a few Volt specific sub values
+Similar to the glyphs array from AP but adds a few Volt specific sub values
 
 =over 4
 
 =item uni
 
-May be an array of values as well as a single value
+A possibly empty array of Unicode scalar values (as decimal integers). 
 
 =item type
 
-MARK, BASE, etc.
+MARK, BASE (in VOLT UI this is the SIMPLE type), LIGATURE or COMPONENT. 
+This element will not be defined if the VOLT type is UNASSIGNED.
 
 =item component_num
 
@@ -52,57 +53,10 @@ Number of components in a ligature
 
 Volt name in the source
 
-=back
-
-=item scripts
-
-This is a hash of script structures keyed off the script name as used in Volt it contains
-
-=over 4
-
-=item tag
-
-Four letter script tag
-
-=item langs
-
-An array of language structures consisting of (nearly there)
-
-=over 4
-
-=item name
-
-Language name as in Volt
-
-=item tag
-
-Language tag that ends up in the font
-
-=item <feature name>
-
-Hash of features by name each containing (last one)
-
-=over 4
-
-=item name
-
-Name of the feature as used to reference it
-
-=item tag
-
-Feature tag that ends up in the font
-
-=item lookups
-
-Array of names of lookups associated with this feature
-
-=back
-
-=back
-
 =item anchors
 
-This is a hash by anchor name that contains a sub hash with the following elements:
+An optional hash by anchor name that contains an array of anchor definitions, one anchor for each ligature component 
+(non-ligature glyphs have a single element in the array). Each anchor definition is a hash including: 
 
 =over 4
 
@@ -114,9 +68,57 @@ A C<pos> type containing the actual position of the anchor point
 
 Contains LOCKED if the anchor point is locked
 
-=item component
+=back
 
-Contains the component number for a ligature or 1 normally.
+=back
+
+=item scripts
+
+A hash of script structures keyed off the script tag as used in Volt, containing:
+
+=over 4
+
+=item name
+
+Optional script name as in Volt
+
+=item tag
+
+Four letter script tag that ends up in the font
+
+=item langs
+
+An array of language structures consisting of (nearly there)
+
+=over 4
+
+=item name
+
+Optional language name as in Volt
+
+=item tag
+
+Four letter language tag that ends up in the font
+
+=item features
+
+Hash of feature structures keyed by feature tag, each containing (last one)
+
+=over 4
+
+=item name
+
+Optional name of the feature
+
+=item tag
+
+Four letter feature tag that ends up in the font
+
+=item lookups
+
+Array of names of lookups associated with this feature
+
+=back
 
 =back
 
@@ -124,7 +126,7 @@ Contains the component number for a ligature or 1 normally.
 
 =item groups
 
-A hash of group definitions by name. The contents is an array of <context> corresponding
+A hash of group definitions by name. The contents is an array of C<context_item>s corresponding
 to each element in the group's defining enum.
 
 =item lookups
@@ -153,24 +155,25 @@ Contains a group name or ALL according to what is to be processed
 
 Contains LTR or RTL
 
+=item comment
+
+Comment, if any, associated with the lookup; string value but can be multi-line.
+
 =item contexts
 
 Contains an array of contexts as per IN_CONTEXT. Each element of the array is itself
-an array corresponding to the elements in a context. In turn each of these elements
-consists of an array with two elements: A string LEFT or RIGHT and a C<context>.
-
-The first element of the array is not a context it either is empty or contains the
-word 'EXCEPT' to indiciate that this is an EXCEPT IN_CONTEXT construct.
+an array corresponding to the elements in a context. The first element this
+array is a string IN_CONTEXT or EXCEPT_CONTEXT depending on the type of context. Subsequent
+elements are arrays that consist of two elements: A string LEFT or RIGHT and a C<context_item>.
 
 =item lookup
 
-This is an array of subactions within the lookup. Each element of this array is itself
-an array with a first element giving the lookup type: C<sub> or C<pos> and the second
+A two-element array, the first element giving the lookup type: C<sub> or C<pos> and the second
 element being the content of the lookup.
 
-For a C<sub> lookup the second element is an array each item of which is a substitution
+For a C<sub> lookup the second element is an array each element of which is a substitution
 pair held in an array. The first element of this substitution pair is an array of
-C<context>s to be substituted and the second element is an array of C<context>s that
+C<context_item>s to be substituted and the second element is an array of C<context_item>s that
 the subsitutition is substituted with.
 
 For a C<pos> lookup, the second element is an array hashes, one per sublookup. The
@@ -185,35 +188,35 @@ The type of positioning. May be ATTACH, ATTACH_CURSIVE, ADJUST_SINGLE, ADJUST_PA
 
 =item context
 
-Gives the context glyph for ATTACH and ADJUST_SINGLE lookups and consists of a
-single C<context>
+Gives the context glyph for ATTACH and ADJUST_SINGLE lookups and consists of an array
+of C<context_item>s
 
-=item context1
+=item first
 
-The first context glyph for an ADJUST_PAIR. It consists of an array of C<context>s
+The first context glyph for an ADJUST_PAIR. It consists of an array of C<context_item>s
 which are referenced by number according to their index (starting at 1) in the
 positioning.
 
-=item context2
+=item second
 
-The second context glyph for an ADJUST_PAIR. It consists of an array of C<contexts>s
+The second context glyph for an ADJUST_PAIR. It consists of an array of C<contexts_item>s
 which correspond to the second number in a position.
 
 =item exits
 
-An array of C<context>s one for each glyph with an C<exit> anchor. Used only in
+An array of C<context_item>s one for each glyph with an C<exit> anchor. Used only in
 ATTACH_CURSIVE
 
 =item enters
 
-An array of C<context>s one for each glyph with an C<entry> anchor. Used only in
+An array of C<context_item>s one for each glyph with an C<entry> anchor. Used only in
 ATTACH_CURSIVE
 
 =item to
 
-Used in an ATTACH to specify which glyphs the C<context> glyphs are attached to and
+Used in an ATTACH to specify what glyphs are being attached and
 with which anchor point. Each element of this array is an array with two elements:
-a C<context> to specify the glyph moving (the base glyph is specified by the
+a C<context_item> to specify the moving glyph(s) (the non-moving glyph is specified by the
 C<context> hash entry) and the name of the anchor point used to link the two. The
 base glyph has an anchor with the anchor name and the second glyph has an anchor
 with the anchor named prefixed by MARK_
@@ -221,10 +224,10 @@ with the anchor named prefixed by MARK_
 =item adj
 
 An adjustment is used in a ADJUST_SINGLE as an array of positioning elements of type
-C<pos> each one corresponding to a C<context> in the context array.
+C<pos> each one corresponding to a C<context_item> in the context array.
 
 For an ADJUST_PAIR the adj is an array of arrays. Each sub array has 3 elements:
-first index into the context1 array (starting at 1), second index into the context2
+first index into the C<first> array (starting at 1), second index into the C<second>
 array (starting at 1) and a C<pos> to specify the actual adjustment of those two
 glyphs.
 
@@ -253,17 +256,17 @@ Specifies the presentation pixels per em
 
 =item cmap
 
-This is an array of cmap entries, each of which is an array of 3 numbers.
+An array of cmap entries, each of which is an array of 3 numbers.
 
 =back
 
 In addition to extra entries in the main object there are two types that are used
 in various places:
 
-=head2 Context
+=head2 context_item
 
-A context consists of an array with two elements. The first element gives the type
-of the context item and the second the value. The context types are:
+A C<context_item> consists of an array with two or three elements. The first, a string, gives the type
+of the context item and the subsequent elements give the value. The context types are:
 
 =over 4
 
@@ -278,14 +281,14 @@ The second array element is a string holding the name of the group being referen
 
 =item RANGE
 
-The second two array elements are the first and last glyph id for the range. Ranges
+The second and third array elements are the first and last glyph id for the range. Ranges
 are particularly difficult to work with when merging different glyph arrays so should
 be avoided
 
 =item ENUM
 
-An enum is a way of embedding a list of contexts within a context. The remaining
-elements in the array are C<context>s
+An enum is a way of embedding a list of contexts within a context. The second
+array element is an array of C<context_item>s
 
 =back
 
@@ -304,11 +307,12 @@ adjust value and the ppem value at which the adjustment occurs.
 =cut
 
 #use Parse::RecDescent;
+
+use strict;
 use Algorithm::Diff qw(sdiff);
 use Font::TTF::Font;
 use Font::TTF::Scripts::AP;
 
-use strict;
 use vars qw($VERSION @ISA %dat $volt_grammar $volt_parser);
 @ISA = qw(Font::TTF::Scripts::AP);
 
@@ -316,11 +320,40 @@ $VERSION = "0.02";  # MJPH   9-AUG-2005     Add support for glyph alternates
 # $VERSION = "0.01";  # MJPH  26-APR-2004     Original based on existing code
 # *read_font = \&Font::TTF::Scripts::AP::read_font;
 
+=head2 $ap = Font::TTF::Scripts::Volt->read_font ($ttf_file, $ap_file, %opts)
+
+Additional options available to this function include
+
+=over 4
+
+=item -point2anchor
+
+Reference to a function that parses an Attachment Point name and returns a list considting of
+a Volt anchor name and component number. The components should be numbered starting
+from 1. Special conditions that may be returned:
+
+If the return value is undef, or if the anchor name is undef, then this attachment point is ignored.
+
+If the returned component number is undef, 1 will be assumed.
+
+If C<-point2anchor> is not provided, a default function (see below) is used.
+
+=back
+
+=cut
+
+# Lookup comments have 5 chars that, in VOLT source, must be escaped with a '\':
+my %unescapes = ('n' => "\n", 't' => "\t", 'q' => '"', "\\" => "\\", '0' => "\0" );
+my $unescape = qr/[ntq\\0]/o;
+my %toescapes = (map {$unescapes{$_} => "\\$_" } keys %unescapes);
+my $toescape = qr/[\n\t"\\\0]/;     # "
+
+
 sub read_font
 {
     my ($self) = Font::TTF::Scripts::AP::read_font(@_);
 
-    $self->{'glyphs'}[0]{'post'} = 'glyph0';        # hack to make volt happy, not sure why
+    #$self->{'glyphs'}[0]{'post'} = 'glyph0';        # hack to make volt happy, not sure why
     $self;
 }
 
@@ -343,13 +376,14 @@ sub out_volt_glyphs
 {
     my ($self) = @_;
     my ($c) = $self->{'font'}{'cmap'}->read->find_ms;
-    my ($g, $res, $i, $type, @revmap, $u);
+    my ($g, $res, $i, @revmap, $u);
 
     foreach $u (keys %{$c->{'val'}})
     { push(@{$revmap[$c->{'val'}{$u}]}, $u); }
     
     for ($i = 0; $i < $self->{'font'}{'maxp'}{'numGlyphs'}; $i++)
     {
+        my ($type);
         $g = $self->{'glyphs'}[$i];
         $res .= "DEF_GLYPH \"$g->{'name'}\" ID $i";
         if (defined $g->{'uni'})
@@ -360,11 +394,8 @@ sub out_volt_glyphs
             elsif (scalar @{$g->{'uni'}} == 1)
             { $res .= " UNICODE $g->{'uni'}[0]"; }
         }
-        
-        if (defined $g->{'props'}{'type'})
-        { $type = $g->{'props'}{'type'} || $g->{'type'}; }
-        elsif (defined $g->{'anchors'})
-        { $type = $g->{'type'} || 'BASE'; }
+
+        $type = glyph_type($g);
         
         $res .= " TYPE $type" if ($type);
         $res .= " COMPONENTS " . $g->{'component_num'} if ($g->{'component_num'});
@@ -373,6 +404,25 @@ sub out_volt_glyphs
     $res;
 }
 
+sub glyph_type
+{
+    my ($g) = @_;
+
+        # Notes about glyph type calculation:
+        # 1) If the AP database entry for a specific glyph contains a type
+        #    property then this has priority. Note that there are two sources 
+        #    for this property in the AP: The xml could include the <property> 
+        #    element, or the property could be set to MARK because of an 
+        #    attachment point whose name starts with '_'.
+        # 2) Any type information obtained from merge_volt takes next
+        #    priority.
+        # 3) Finally, if there are any anchors at all, we guess BASE or LIGATURE
+        #    as determined by the number of components.
+    return $g->{'props'}{'type'} 
+         || $g->{'type'}
+         || (defined $g->{'anchors'} ? ($g->{'component_num'} > 1 ? 'LIGATURE' : 'BASE') : undef);
+
+}
 
 sub out_volt_classes
 {
@@ -395,19 +445,20 @@ sub out_volt_classes
 sub out_volt_scripts
 {
     my ($self) = @_;
-    my ($res, $lk, $s, $f, $l);
+    my ($res, $lk, $st, $ft, $l);
 
-    foreach $s (sort keys %{$self->{'scripts'}})
+    foreach $st (sort keys %{$self->{'scripts'}})
     {
-        my ($t) = $self->{'scripts'}{$s};
-        $res .= "DEF_SCRIPT NAME \"$s\" TAG \"$t->{'tag'}\"\n";
-        foreach $l (@{$t->{'lang'}})
+        my ($s) = $self->{'scripts'}{$st};
+        $res .= "DEF_SCRIPT " . ($s->{'name'} ? "NAME \"$s->{'name'}\" " : '') . "TAG \"$st\"\n";
+        foreach $l (@{$s->{'langs'}})
         {
-            $res .= "DEF_LANGSYS NAME \"$l->{'name'}\" TAG \"$l->{'tag'}\"\n";
-            foreach $f (sort grep {$_ ne 'name' && $_ ne 'tag'} keys %{$l})
+            $res .= "DEF_LANGSYS " . ( $l->{'name'} ? "NAME \"$l->{'name'}\" " : '') . "TAG \"$l->{'tag'}\"\n";
+            foreach $ft (sort keys %{$l->{'features'}})
             {
-                $res .= "DEF_FEATURE NAME \"$f\" TAG \"$l->{$f}{'tag'}\"\n";
-                foreach $lk (@{$l->{$f}{'lookups'}})
+                my $f = $l->{'features'}{$ft};
+                $res .= "DEF_FEATURE " . ($f->{'name'} ? "NAME \"$f->{'name'}\" " : '') . "TAG \"$ft\"\n";
+                foreach $lk (@{$f->{'lookups'}})
                 { $res .= " LOOKUP \"$lk\""; }
                 $res .= "\nEND_FEATURE\n";
             }
@@ -446,6 +497,12 @@ sub out_volt_lookups
             { $res .= " $l->{$q}" if ($l->{$q}); }
         }
         $res .= "\n";
+        if ($l->{'comment'})
+        {
+            my $comment = $l->{'comment'};
+            $comment =~ s/($toescape)/$toescapes{$1}/oge;
+            print "COMMENTS \"$comment\"\n";
+        }
         if (scalar @{$l->{'contexts'}})
         {
             foreach $q (@{$l->{'contexts'}})
@@ -506,15 +563,16 @@ sub out_volt_lookups
                     { $res .= "\nEXIT " . out_context($c, $self); }
                     foreach $c (@{$s->{'enters'}})
                     { $res .= "\nENTER " . out_context($c, $self); }
+                    $res .= "\nEND_ATTACH\n";
                 }
                 elsif ($s->{'type'} eq 'ADJUST_PAIR')
                 {
                     my ($c);
                     $res .= "\n";
-                    foreach $c (@{$s->{'context1'}})
+                    foreach $c (@{$s->{'first'}})
                     { $res .= " FIRST  " . out_context($c, $self); }
                     $res .= "\n";
-                    foreach $c (@{$s->{'context2'}})
+                    foreach $c (@{$s->{'second'}})
                     { $res .= " SECOND  " . out_context($c, $self); }
                     foreach $c (@{$s->{'adj'}})
                     {
@@ -544,16 +602,22 @@ sub out_volt_lookups
 sub out_volt_anchors
 {
     my ($self) = @_;
-    my ($res, $glyph, $k, $i);
+    my ($res, $glyph, $k, $i, $c);
     
     foreach $glyph (@{$self->{'glyphs'}})
     {
         $k = $glyph->{'name'};
         foreach $i (sort keys %{$glyph->{'anchors'}})
         {
-            $res .= "DEF_ANCHOR \"$i\" ON $glyph->{'gnum'} GLYPH $k COMPONENT 1 " .
-                    "AT POS DX $glyph->{'anchors'}{$i}{'pos'}{'x'}[0] DY $glyph->{'anchors'}{$i}{'pos'}{'y'}[0] END_POS " .
-                    "END_ANCHOR\n";
+            foreach $c (0 .. $#{$glyph->{'anchors'}{$i}})
+            {
+                $res .= "DEF_ANCHOR \"$i\" ON $glyph->{'gnum'} GLYPH $k COMPONENT " . ($c+1) . ' ' .
+                    ($glyph->{'anchors'}{$i}[$c]{'locked'} ? 'LOCKED ' : '') .
+                    "AT POS " .
+                    ($glyph->{'anchors'}{$i}[$c]{'pos'}{'x'}[0] ? "DX $glyph->{'anchors'}{$i}[$c]{'pos'}{'x'}[0] " : '') .
+                    ($glyph->{'anchors'}{$i}[$c]{'pos'}{'y'}[0] ? "DY $glyph->{'anchors'}{$i}[$c]{'pos'}{'y'}[0] " : '') .
+                    "END_POS END_ANCHOR\n";
+            }
         }
     }
     $res;
@@ -631,18 +695,15 @@ sub out_pos
     $res .= " END_POS";
     $res;
 }
+
 sub make_name
 {
     my ($self, $gname, $uni, $glyph) = @_;
 
     if (defined $glyph->{'props'}{'VOLT_id'})
     { return $glyph->{'props'}{'VOLT_id'}; }
-    else
-    { 
-        $gname =~ s{/.*$}{}o;
-        $gname =~ s/[.;\-\"\'&$#\/]//og;
-    }
-    $gname;
+    $gname =~ s/[;\-\"\'&$\#]//og;    # Some characters unacceptable to VOLT
+    $self->SUPER::make_name($gname, $uni, $glyph);
 }
 
 sub make_point
@@ -671,7 +732,7 @@ $volt_grammar = <<'EOG';
 
     glyph : 'DEF_GLYPH' <commit> qid 'ID' num glyph_unicode(?) glyph_type(?) glyph_component(?) 'END_GLYPH'
             { 
-                $dat{'glyphs'}[$item[5]] = {'uni' => $item[6][0], 'type' => $item[7][0], 'name' => $item[3], 'component_num' => $item[8][0], 'gnum' => $item[5]};
+                $dat{'glyphs'}[$item[5]] = {'uni' => $item[6], 'type' => $item[7], 'name' => $item[3], 'component_num' => $item[8][0], 'gnum' => $item[5]};
                 $dat{'glyph_names'}{$item[3]} = $item[5];
                 1;
             }
@@ -687,11 +748,11 @@ $volt_grammar = <<'EOG';
     glyph_component : 'COMPONENTS' num
             { $return = $item[-1]; }
 
-    script : 'DEF_SCRIPT' <commit> name tag langsys(s?) 'END_SCRIPT'
-            { $dat{'scripts'}{$item[3]} = {'tag' => $item[4], 'lang' => $item[5]}; }
+    script : 'DEF_SCRIPT' <commit> name? tag langsys(s?) 'END_SCRIPT'
+            { $dat{'scripts'}{$item[4]} = {'name' => $item[3], 'tag' => $item[4], 'langs' => $item[5]}; }
 
-    langsys : 'DEF_LANGSYS' name tag feature(s?) 'END_LANGSYS'
-            { $return = { 'name' => $item[2], 'tag' => $item[3], map {$_->{'name'} => $_} @{$item[4]}}; }
+    langsys : 'DEF_LANGSYS' name? tag feature(s?) 'END_LANGSYS'
+            { $return = { 'name' => $item[2], 'tag' => $item[3], 'features' => { map {$_->{'tag'} => $_} @{$item[4]}}}; }
 
     feature : 'DEF_FEATURE' name tag lookup_ref(s?) 'END_FEATURE'
             { $return = { 'name' => $item[2], 'tag' => $item[3], 'lookups' => $item[4]}; }
@@ -702,15 +763,23 @@ $volt_grammar = <<'EOG';
     enum : 'ENUM' context(s?) 'END_ENUM'
             { $return = [@{$item[2]}]; }
 
-    lookup : 'DEF_LOOKUP' <commit> qid lk_procbase(?) lk_procmarks(?) lk_all(?) lk_direction(?) lk_context(s) lk_content
+    lookup : 'DEF_LOOKUP' <commit> qid lk_procbase(?) lk_procmarks(?) lk_all(?) lk_direction(?) lk_comment(?) lk_context(s) lk_content
             { push (@{$dat{'lookups'}}, { 'id' => $item[3],
                                           'base' => $item[4][0],
                                           'marks' => $item[5][0],
                                           'all' => $item[6][0],
                                           'dir' => $item[7][0],
-                                          'contexts' => [@{$item[8]}],
-                                          'lookup' => $item[9] }); }
+                                          'comment' => $item[8],
+                                          'contexts' => [@{$item[9]}],
+                                          'lookup' => $item[10] }); }
 
+    lk_comment : /COMMENTS/ qid
+            { 
+                my $comment = $item[-1];
+                $comment =~ s/\\($unescape)/$unescapes{$1}/oge;
+                $return = $comment; 
+            }
+            
     lk_context : /EXCEPT_CONTEXT|IN_CONTEXT/ lk_context_lt(s?) 'END_CONTEXT'
             { $return = [$item[1], @{$item[2]}]; }
 
@@ -739,7 +808,7 @@ $volt_grammar = <<'EOG';
         | 'ATTACH' <commit> context(s) 'TO' attach(s) 'END_ATTACH'
             { $return = {'type' => $item[1], 'context' => $item[3], 'to' => $item[5] }; }
         | 'ADJUST_PAIR' <commit> post_first(s) post_second(s) post_adj(s) 'END_ADJUST'
-            { $return = {'type' => $item[1], 'context1' => $item[3], 'context2' => $item[4], 'adj' => $item[5]}; }
+            { $return = {'type' => $item[1], 'first' => $item[3], 'second' => $item[4], 'adj' => $item[5]}; }
         | 'ADJUST_SINGLE' <commit> post_single(s) 'END_ADJUST'
             { $return = {'type' => $item[1], 'context' => [map {$_->[0]} @{$item[3]}], 'adj' => [map {$_->[1]} @{$item[3]}]}; }
 
@@ -765,7 +834,7 @@ $volt_grammar = <<'EOG';
             { $return = [$item[1], $item[3]]; }
 
     anchor : 'DEF_ANCHOR' <commit> qid 'ON' num 'GLYPH' gid 'COMPONENT' num anchor_locked(?) 'AT' pos 'END_ANCHOR'
-            { $dat{'glyphs'}[$item[5]]{'anchors'}{$item[3]} = {'pos' => $item[-2], 'component' => $item[9], 'locked' => $item[10][0]}; 1; }
+            { $dat{'glyphs'}[$item[5]]{'anchors'}{$item[3]}[$item[9]-1] = {'pos' => $item[-2], 'locked' => $item[10][0]}; 1; }
     
     anchor_locked : 'LOCKED'
 
@@ -897,59 +966,59 @@ sub parse_volt
                 'component_num' => $comp,
                 'type' => $type};
         if ($uni_list)
-        { $res->{'glyphs'}[$gnum]{'uni'} = [map {s/^U+//oi; hex($_);} split(/\s*,\s*/, $uni_list)]; }
-        else
+        { $res->{'glyphs'}[$gnum]{'uni'} = [map {s/^U\+//oi; hex($_)} split(/\s*,\s*/, $uni_list)]; }
+        elsif ($uni)
         { $res->{'glyphs'}[$gnum]{'uni'} = [$uni]; }
         $res->{'glyph_names'}{$name} = $gnum;
     }
 
-#    script : 'DEF_SCRIPT' <commit> name tag langsys(s?) 'END_SCRIPT'
-#            { $dat{'scripts'}{$item[3]} = {'tag' => $item[4], 'lang' => $item[5]}; }
-    while ($str =~ m/\GDEF_SCRIPT\s+NAME\s+"([^"]+)"\s+TAG\s+"([^"]+)"\s+/ogc)
+#    script : 'DEF_SCRIPT' <commit> name? tag langsys(s?) 'END_SCRIPT'
+#            { $dat{'scripts'}{$item[3]} = {'tag' => $item[4], 'langs' => $item[5]}; }
+    while ($str =~ m/\GDEF_SCRIPT\s+(?:NAME\s+"([^"]+)"\s+)?TAG\s+"([^"]+)"\s+/ogc)
     {
         my ($name, $tag) = ($1, $2);
         my (@langs);
 
-#    langsys : 'DEF_LANGSYS' name tag feature(s?) 'END_LANGSYS'
+#    langsys : 'DEF_LANGSYS' name? tag feature(s?) 'END_LANGSYS'
 #            { $return = { 'name' => $item[2], 'tag' => $item[3], map {$_->{'name'} => $_} @{$item[4]}}; }
-        while ($str =~ m/\GDEF_LANGSYS\s+NAME\s+"([^"]+)"\s+TAG\s+"([^"]+)"\s+/ogc)
+        while ($str =~ m/\GDEF_LANGSYS\s+(?:NAME\s+"([^"]+)"\s+)?TAG\s+"([^"]+)"\s+/ogc)
         {
             my ($lname, $ltag) = ($1, $2);
             my (%feats);
 
-#    feature : 'DEF_FEATURE' name tag lookup_ref(s?) 'END_FEATURE'
+#    feature : 'DEF_FEATURE' name? tag lookup_ref(s?) 'END_FEATURE'
 #            { $return = { 'name' => $item[2], 'tag' => $item[3], 'lookups' => $item[4]}; }
-            while ($str =~ m/\GDEF_FEATURE\s+NAME\s+"([^"]+)"\s+TAG\s+"([^"]+)"\s+/ogc)
+            while ($str =~ m/\GDEF_FEATURE\s+(?:NAME\s+"([^"]+)"\s+)?TAG\s+"([^"]+)"\s+/ogc)
             {
                 my ($fname, $ftag) = ($1, $2);
                 my (@lkups);
 
 #    lookup_ref : 'LOOKUP' qid
 #        { $return = $item[2]; }
-                while ($str =~ m/\GLOOKUP\s+"([^"]+)"\s+/ogc)
+                while ($str =~ m/\GLOOKUP\s+"([^"]+)"\s+/ogc)   # "
                 {
                     my ($kname) = ($1);
                     push (@lkups, $kname);
                 }
-                $feats{$fname} = {'name' => $fname, 'tag' => $ftag, 'lookups' => [@lkups]};
+                $feats{$ftag} = {'name' => $fname, 'tag' => $ftag, 'lookups' => [@lkups]};
 
                 unless ($str =~ m/\GEND_FEATURE\s+/ogc)
                 { die "Expected END_FEATURE, found: " . substr($str, pos($str), 20); }
             }
-            push (@langs, {'name' => $lname, 'tag' => $ltag, %feats});
+            push (@langs, {'name' => $lname, 'tag' => $ltag, 'features' => {%feats}});
 
             unless ($str =~ m/\GEND_LANGSYS\s+/ogc)
             { die "Expected END_LANGSYS, found: " . substr($str, pos($str), 20); }
         }
 
-        $res->{'scripts'}{$name} = {'tag' => $tag, 'lang' => [@langs]};
+        $res->{'scripts'}{$tag} = {'name' => $name, 'tag' => $tag, 'langs' => [@langs]};
         unless ($str =~ m/\GEND_SCRIPT\s+/ogc)
         { die "Expected END_SCRIPT, found: " . substr($str, pos($str), 20); }
     }
 
 #    group : 'DEF_GROUP' <commit> qid enum(?) 'END_GROUP'
 #            { $dat{'groups'}{$item[3]} = $item[4][0]; }
-    while ($str =~ m/\GDEF_GROUP\s+"([^"]+)"\s+(?:ENUM\s+)?/ogc)
+    while ($str =~ m/\GDEF_GROUP\s+"([^"]+)"\s+(?:ENUM\s+)?/ogc)    # "
     {
         my ($name) = ($1);
         my (@entries) = parse_enum(\$str, $res);
@@ -984,6 +1053,14 @@ sub parse_volt
                 'marks' => $3,
                 'all' => $4 || $5,
                 'dir' => $6});
+
+#    lk_comment : 'COMMENTS' qid
+        while ($str =~ m/\GCOMMENTS\s+"([^"]+)"\s+/ogc)     # " 
+        {
+            my ($comment) = $1;
+            $comment =~ s/\\($unescape)/$unescapes{$1}/oge;
+            $res->{'lookups'}[-1]{'comment'} = $comment;
+        }
 
 #    lk_context : /EXCEPT_CONTEXT|IN_CONTEXT/ lk_context_lt(s?) 'END_CONTEXT'
 #            { $return = [$item[1], @{$item[3]}]; }
@@ -1077,7 +1154,7 @@ sub parse_volt
                         {
                             my (@acont) = parse_enum(\$str, $res);
                             last unless (@acont);
-                            if ($str =~ m/\GAT\s+ANCHOR\s+"([^"]+)"\s+/ogc)
+                            if ($str =~ m/\GAT\s+ANCHOR\s+"([^"]+)"\s+/ogc) # "
                             { push (@anchors, [$acont[0], $1]); }
                             else
                             { die "Expected AT ANCHOR in LOOKUP $name, found: " . substr($str, pos($str), 20); }
@@ -1087,7 +1164,7 @@ sub parse_volt
                         { die "Expected END_ATTACH in LOOKUP $name, found: " . substr($str, pos($str), 20); }
                     }
 #        | 'ADJUST_PAIR' <commit> post_first(s) post_second(s) post_adj(s) 'END_ADJUST'
-#            { $return = {'type' => $item[1], 'context1' => $item[3], 'context2' => $item[4], 'adj' => $item[5]}; }
+#            { $return = {'type' => $item[1], 'first' => $item[3], 'second' => $item[4], 'adj' => $item[5]}; }
                     elsif ($str =~ m/\GADJUST_PAIR\s+/ogc)
                     {
                         my (@firsts, @seconds, @adjs);
@@ -1119,8 +1196,8 @@ sub parse_volt
                             push (@adjs, [$l, $r, [@poses]]);
                         }
                         push (@content, {'type' => 'ADJUST_PAIR',
-                                'context1' => [@firsts],
-                                'context2' => [@seconds],
+                                'first' => [@firsts],
+                                'second' => [@seconds],
                                 'adj' => [@adjs]});
                         unless ($str =~ m/\GEND_ADJUST\s+/ogc)
                         { die "Expected END_ADJUST in LOOKUP $name, found: " . substr($str, pos($str), 20); }
@@ -1161,7 +1238,7 @@ sub parse_volt
     }
 
 #    anchor : 'DEF_ANCHOR' <commit> qid 'ON' num 'GLYPH' gid 'COMPONENT' num anchor_locked(?) 'AT' pos 'END_ANCHOR'
-#            { $dat{'glyphs'}[$item[5]]{'anchors'}{$item[3]} = {'pos' => $item[-2], 'component' => $item[9], 'locked' => $item[10][0]}; 1; }
+#            { $dat{'glyphs'}[$item[5]]{'anchors'}{$item[3]}[$item[9]] = {'pos' => $item[-2], 'locked' => $item[10][0]}; 1; }
 #    
 #    anchor_locked : 'LOCKED'
     while ($str =~ m/\GDEF_ANCHOR\s+"([^"]+)"\s+ON\s+(\d+)\s+GLYPH\s+(?:(?:"([^"]+)")|(\S+))\s+COMPONENT\s+(\d+)\s+(?:(LOCKED)\s+)?AT\s+/ogc)
@@ -1173,7 +1250,7 @@ sub parse_volt
         { die "Expected POS in ANCHOR $name on $gname, found: " . substr($str, pos($str), 20); }
         unless ($str =~ m/\GEND_ANCHOR\s+/ogc)
         { die "Expected END_ANCHOR in ANCHOR $name on $gname, found: " . substr($str, pos($str), 20); }
-        $res->{'glyphs'}[$gnum]{'anchors'}{$name} = {'pos' => $pos, 'component' => $comp, 'locked' => $locked};
+        $res->{'glyphs'}[$gnum]{'anchors'}{$name}[$comp-1] = {'pos' => $pos, 'locked' => $locked};
     }
 
 #    info : i_grid(?) i_pres(?) i_ppos(?) i_cmap(s?)
@@ -1222,15 +1299,15 @@ sub parse_enum
 #             | enum                 { $return = ['ENUM', @{$item[1]}]; }
     while (1)
     {
-        if ($$str =~ m/\GGLYPH\s+(?:"([^"]+)"|(\S+))\s+/ogc)
+        if ($$str =~ m/\GGLYPH\s+(?:"([^"]+)"|(\S+))\s+/ogc)    #"
         { push (@res, ['GLYPH', $dat->{'glyph_names'}{$1 || $2}]); }
-        elsif ($$str =~ m/\GGROUP\s+"([^"]+)"\s+/ogc )
+        elsif ($$str =~ m/\GGROUP\s+"([^"]+)"\s+/ogc )          #"
         { push (@res, ['GROUP', $1]); }
         elsif ($$str =~ m/\GRANGE\s+(?:"([^"]+)"|(\S+))\s+TO\s+(?:"([^"]+)"|(\S+))\s+/ogc)
         { push (@res, ['RANGE', $dat->{'glyph_names'}{$1 || $2}, $dat->{'glyph_names'}{$3 || $4}]); }
         elsif ($$str =~ m/\GENUM\s+/ogc)
         {
-            push (@res, ['ENUM', [parse_enum($$str, $dat)]]);
+            push (@res, ['ENUM', [parse_enum($str, $dat)]]);
             unless ($$str =~ m/\GEND_ENUM\s+/ogc)
             { die "Expected END_ENUM, found: " . substr($$str, pos($$str), 20); }
         }
@@ -1300,6 +1377,20 @@ sub parse_adjs
     return @res;
 }
 
+=head2 $fv->align_glyphs($dat)
+
+Provides one possible way to map glyph names in a new font with an existing VOLT project.
+
+Compares the list of glyphs found during L</"read_font"> (the I<new> glyph list) with the list 
+from L</"parse_volt"> in $dat (the I<old> glyph list>, returning an array that provides
+a mapping between old and new glyph IDs. The array is indexed by old glyph ID and returns the
+new glyph ID.
+
+This implementation works by C<sdiff>ing the two ordered lists of glyph C<name>s and 
+then matching them up, first by C<name> then by C<uni>.
+
+=cut
+
 sub align_glyphs
 {
     my ($self, $data) = @_;
@@ -1338,6 +1429,7 @@ sub align_glyphs
             {
                 foreach $u (@{$uni})
                 {
+                    next unless (defined $u);
                     foreach $g (@{$self->{'glyphs'}})
                     {
                         if (ref $g->{'uni'} && grep {$_ == $u} @{$g->{'uni'}} && !defined $revmap[$g->{'gnum'}])
@@ -1350,8 +1442,14 @@ sub align_glyphs
                     {
                         $map[$gnum] = $gnew;
                         $revmap[$gnew] = $gnum;
+                        last;
                     }
                 }
+                unless ($gnew)
+                {
+                    print STDERR "Can't find alignment for glyph $s->[1]\n";
+                    $self->{'error'} = 1;
+            }
             }
     # make it a deletion (i.e. in old but not in new)
         }
@@ -1379,7 +1477,7 @@ sub align_glyphs
 sub merge_volt
 {
     my ($self, $data, $map) = @_;
-    my ($g, $k);
+    my ($g, $k, $c);
 
     $self->{'map'} = $map;
     foreach (qw(groups lookups scripts info))
@@ -1390,27 +1488,29 @@ sub merge_volt
         my ($n) = $self->{'glyphs'}[$map->[$g->{'gnum'}]];
         next unless defined $n;
 
-        $n->{'component_num'} ||= $g->{'component_num'};
-        $n->{'type'} ||= $g->{'type'};
-
+        foreach (qw(component_num type name uni))
+        { $n->{$_} ||= $g->{$_} if defined $g->{$_}; }
+        
         foreach $k (keys %{$g->{'anchors'}})
         {
-            my ($p) = $g->{'anchors'}{$k};
-            my ($np) = $n->{'anchors'}{$k};
-
-            if (defined $np)
+            foreach $c (0 .. $#{$g->{'anchors'}{$k}})
             {
-                $np->{'component'} ||= $p->{'component'};
-                $np->{'locked'} ||= $p->{'locked'};
-                $np->{'pos'} ||= $p->{'pos'};
-                if ($np->{'pos'})
+                my ($p) = $g->{'anchors'}{$k}[$c];
+                my ($np) = $n->{'anchors'}{$k}[$c];
+    
+                if (defined $np)
                 {
-                    $np->{'pos'}{'x'} = $np->{'x'};
-                    $np->{'pos'}{'y'} = $np->{'y'};
+                    foreach (qw(locked pos))
+                    { $np->{$_} ||= $p->{$_}; }
+                    if ($np->{'pos'})
+                    {
+                        $np->{'pos'}{'x'} = $np->{'x'};
+                        $np->{'pos'}{'y'} = $np->{'y'};
+                    }
                 }
+                else
+                { $n->{'anchors'}{$k}[$c] = $p; }
             }
-            else
-            { $n->{'anchors'}{$k} = $p; }
         }
     }
 
@@ -1438,7 +1538,7 @@ sub merge_volt
         {
             foreach $c (@{$g->{'lookup'}[1]})
             {
-                foreach (qw(context context1 context2 enters exits))
+                foreach (qw(context first second enters exits))
                 { map_enum($map, @{$c->{$_}}) if (defined $c->{$_}); }
             }
         }
@@ -1456,7 +1556,7 @@ sub map_enum
     {
         if (ref $c->[0])
         { map_enum($map, @{$c}); }
-        if ($c->[0] eq 'GLYPH')
+        elsif ($c->[0] eq 'GLYPH')
         { $c->[1] = $map->[$c->[1]]; }
         elsif ($c->[0] eq 'RANGE')      # yukky we'll do it simply - don't use ranges
         {
@@ -1524,21 +1624,23 @@ sub make_lookups
 
     foreach $c (sort keys %{$self->{'lists'}})
     {
-#        print STDERR "$c: ";
         next if ($c =~ m/^_/o);
         next unless (defined $self->{'lists'}{"_$c"});
-        if ($opts->{'-force'})
-        { $self->{'lookups'} = [grep {$_->{'id'} ne "base_$c"} @{$self->{'lookups'}}]; }
-        else
-        { next if (grep {$_->{'id'} eq "base_$c"} @{$self->{'lookups'}}); }
         next if (defined $opts->{'-notmark'} && $opts->{'-notmark'} =~ m/\b_$c\b/);
 
-        my ($l) = {'id' => "base_$c", 'base' => 'PROCESS_BASE', 'marks' => 'PROCESS_MARKS',
+        foreach my $t (qw(base mark ligature))
+        {
+            my ($name) = sprintf("cTakes%sDia_%s", $c, $t);
+            if ($opts->{'-force'})
+            { $self->{'lookups'} = [grep {$_->{'id'} ne "base_${c}_$t"} @{$self->{'lookups'}}]; }
+            else
+            { next if (grep {$_->{'id'} eq "base_${c}_$t"} @{$self->{'lookups'}}); }
+            my ($l) = {'id' => "base_${c}_$t", 'base' => 'PROCESS_BASE', 'marks' => 'PROCESS_MARKS',
                      'all' => 'ALL', 'dir' => 'LTR', 'contexts' => [],
-                      'lookup' => ['pos', [{'type' => 'ATTACH', 'context' => [['GROUP', "cTakes${c}Dia"]],
+                      'lookup' => ['pos', [{'type' => 'ATTACH', 'context' => [['GROUP', $name]],
                                 'to' => [[['GROUP', "c${c}Dia"], $c]]}]]};
-        push(@{$self->{'lookups'}}, $l);
-#        print STDERR join(",", map {$_->{'id'}} @{$self->{'lookups'}}) . "\n";
+            push(@{$self->{'lookups'}}, $l) if (defined $self->{'groups'}{$name});
+        }
 
 #        $res .= "DEF_LOOKUP \"base_$c\" PROCESS_BASE PROCESS_MARKS ALL DIRECTION LTR\n";
 #        $res .= "IN_CONTEXT\nEND_CONTEXT\nAS_POSITION\n";
@@ -1547,6 +1649,13 @@ sub make_lookups
 #        $res .= "END_ATTACH\nEND_POSITION\n";
     }
 }
+
+=head2 $fv->make_groups
+
+Convert all C<lists>, C<classes> and C<ligclasses>
+into Volt C<groups>.
+
+=cut
 
 sub make_groups
 {
@@ -1561,13 +1670,23 @@ sub make_groups
         my ($name) = $l;
 
         if ($name !~ m/^_(.*)$/o)
-        { $name = "Takes$name"; }
+        {
+            $name = "Takes$name";
+            foreach my $t (qw(BASE MARK LIGATURE))
+            {
+                my (@group) = map {['GLYPH', $_]} grep {glyph_type($self->{'glyphs'}[$_]) eq $t} @{$lists->{$l}};
+                push (@group, map{['GLYPH', $_]} grep {glyph_type($self->{'glyphs'}[$_]) eq ''} @{$lists->{$l}}) if ($t eq 'BASE');
+                my ($gname) = sprintf("c%sDia_%s", $name, lc($t));
+                $self->{'groups'}{$gname} = [@group] if (scalar @group);
+            }
+        }
         else
-        { $name =~ s/^_//o; }
-        $self->{'groups'}{"c${name}Dia"} = [map {['GLYPH', $_]} @{$lists->{$l}}];
+        {
+            $name =~ s/^_//o;
+            $self->{'groups'}{"c${name}Dia"} = [map {['GLYPH', $_]} @{$lists->{$l}}];
+        }
     }
     
-
     foreach $l (sort keys %{$classes})
     {
         $self->{'groups'}{"c$l"} = [map {['GLYPH', $_]} @{$classes->{$l}}];
@@ -1579,24 +1698,60 @@ sub make_groups
     }
 }
 
+=head2 $fv->make_anchors
+
+Convert all attachment points in $fv into Volt C<anchors>
+
+=cut
+
 sub make_anchors
 {
     my ($self) = @_;
-    my ($g, $p, $k);
+    my ($g, $p);
 
+    my $filter = defined $self->{'opts'}{'-point2anchor'} ? $self->{'opts'}{'-point2anchor'} : \&point2anchor;
+    
     foreach $g (@{$self->{'glyphs'}})
     {
         if (defined $g->{'points'})
-        {
+        {    
             foreach $p (keys %{$g->{'points'}})
             {
-                $k = ($p =~ m/^_/o) ? "MARK$p" : $p;
-                $g->{'anchors'}{$k}{'pos'}{'x'}[0] = $g->{'points'}{$p}{'x'};
-                $g->{'anchors'}{$k}{'pos'}{'y'}[0] = $g->{'points'}{$p}{'y'};
+                my ($name, $comp) = &{$filter}($p);
+                next unless $name;
+                $g->{'anchors'}{$name}[$comp]{'pos'}{'x'}[0] = $g->{'points'}{$p}{'x'};
+                $g->{'anchors'}{$name}[$comp]{'pos'}{'y'}[0] = $g->{'points'}{$p}{'y'};
             }
         }
     }
 }
 
+=head2 point2anchor
+
+This function, used if C<-point2anchor> option isn't provided, peels off any digits at the 
+end of the supplied Attachment Point name and uses them for the component. Anchor names
+starting with "_" are altered to start with "MARK_" instead.
+
+NB: This function is not an object method, and it can be overridden by setting the C<-point2anchor>
+option of C<read_font>.
+
+=cut
+
+sub point2anchor
+{
+    my $name = shift;
+    my ($num);
+
+    if ($name =~ s/(\d+)$//o)
+    { $num = $1; }
+    $name =~ s/^_/MARK_/o;
+    return ($name, $num);
+}
+
 1;
 
+=head1 See also
+
+L<Font::TTF::Scripts::AP>
+
+=cut

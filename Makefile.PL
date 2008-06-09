@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 use Config;
 use IO::File;
 
-$VERSION = "0.10";
+$VERSION = "0.11";
 
 $fversion = $VERSION;
 $fversion =~ s/\./_/og;
@@ -15,7 +15,7 @@ if ($^O eq 'MSWin32')
 }
 
 @scripts = grep {-f && !m/\./o && !m/~$/o } glob("scripts/*");
-@scripts = grep {!m|/add|oi} @scripts unless ($^O eq 'MSWin32');
+@scripts = grep {!m|/add[^_]|oi} @scripts unless ($^O eq 'MSWin32');
 
 @theselibs = grep {-f } glob("lib/Font/Scripts/*");
 
@@ -45,7 +45,7 @@ WriteMakefile (
         ABSTRACT => "TTF font support scripts for Perl",
 		PREREQ_PM => {
 			'Algorithm::Diff' => 0,
-			'Font::TTF' => 0.43,
+			'Font::TTF' => 0.44,
 			'Text::PDF::File' => 0,
 			'Parse::RecDescent' => 1.51
 			},

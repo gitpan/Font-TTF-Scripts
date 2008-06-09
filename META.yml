@@ -1,12 +1,12 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Font-TTF-Scripts
-version:      0.10
+version:      0.11
 version_from: 
 installdirs:  site
 requires:
     Algorithm::Diff:               0
-    Font::TTF:                     0.43
+    Font::TTF:                     0.44
     Parse::RecDescent:             1.51
     Text::PDF::File:               0
 
