@@ -5,16 +5,19 @@
 
 [Setup]
 AppName=SIL TTF Font Utilities
+AppVersion=0.11
 AppVerName=SIL TTF Font Utilities 0.11
 AppPublisher=SIL International
 AppPublisherURL=http://www.sil.org/computing
 ; AppSupportURL=http://www.sil.org/computing
 ; AppUpdatesURL=http://www.sil.org/computing
+VersionInfoVersion=0.11
+VersionInfoCopyright="Copyright (c) 1997-2008 SIL International; released under Perl Artistic License"
 DefaultDirName={pf}\SIL\FontUtils
 DefaultGroupName=Font Utilities
 ; uncomment the following line if you want your installation to run on NT 3.51 too.
 ; MinVersion=4,3.51
-AdminPrivilegesRequired=yes
+PrivilegesRequired=admin
 OutputBaseFilename=TTFontUtils_0_11
 OutputDir=.
 ; DisableProgramGroupPage=yes
@@ -25,7 +28,7 @@ Name: updatepath; Description: "Add installation directory to &PATH";
 
 [Files]
 Source: "scripts\fontutils.par"; DestDir: "{app}"; CopyMode: alwaysoverwrite
-Source: "/usr/bin\parl.exe"; DestDir: "{app}"; CopyMode: alwaysoverwrite
+Source: "/usr/local/bin\parl.exe"; DestDir: "{app}"; CopyMode: alwaysoverwrite
 
 [Run]
 Filename: "{app}\parl.exe"; Parameters: """{app}\fontutils.par"" addpath ""{app}"""; Flags: runminimized; Tasks: updatepath
