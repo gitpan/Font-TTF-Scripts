@@ -1,14 +1,17 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Font-TTF-Scripts
-version:      0.12
-version_from: 
-installdirs:  site
-requires:
+--- #YAML:1.0
+name:                Font-TTF-Scripts
+version:             0.13
+abstract:            TTF font support scripts for Perl
+license:             ~
+author:              
+    - martin_hosken@sil.org
+generated_by:        ExtUtils::MakeMaker version 6.42
+distribution_type:   module
+requires:     
     Algorithm::Diff:               0
     Font::TTF:                     0.44
     Text::PDF::File:               0
     XML::Parser:                   0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30_01
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3

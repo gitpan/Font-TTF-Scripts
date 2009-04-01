@@ -5,20 +5,20 @@
 
 [Setup]
 AppName=SIL TTF Font Utilities
-AppVersion=0.12
-AppVerName=SIL TTF Font Utilities 0.12
+AppVersion=0.13
+AppVerName=SIL TTF Font Utilities 0.13
 AppPublisher=SIL International
 AppPublisherURL=http://www.sil.org/computing
 ; AppSupportURL=http://www.sil.org/computing
 ; AppUpdatesURL=http://www.sil.org/computing
-VersionInfoVersion=0.12
-VersionInfoCopyright="Copyright (c) 1997-2008 SIL International; released under Perl Artistic License"
+VersionInfoVersion=0.13
+VersionInfoCopyright="Copyright (c) 1997-2009 SIL International; released under Perl Artistic License"
 DefaultDirName={pf}\SIL\FontUtils
 DefaultGroupName=Font Utilities
 ; uncomment the following line if you want your installation to run on NT 3.51 too.
 ; MinVersion=4,3.51
 PrivilegesRequired=admin
-OutputBaseFilename=TTFontUtils_0_12
+OutputBaseFilename=TTFontUtils_0_13
 OutputDir=.
 ; DisableProgramGroupPage=yes
 DisableStartupPrompt=yes
