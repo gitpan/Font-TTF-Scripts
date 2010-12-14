@@ -18,7 +18,7 @@ $VERSION = 0.01;    # MJPH      11-OCT-2007     First release
 
 unless ($CHAIN_CALL)
 {
-    getopts('a:d:hit:x:', \%opts);
+    getopts('a:d:hirt:x:', \%opts);
 
     unless (defined $ARGV[1] || defined $opts{h})
     {
@@ -83,7 +83,7 @@ sub main
     { $volt_text = $font->{'TSIV'}->read->{' dat'}; }
     else
     { die "No VOLT table in the font, nothing to do"; }
-    delete $font->{'TSIV'};        # remove the volt source
+    delete $font->{'TSIV'} unless $opts{'r'};        # remove the volt source
 
     if ($opts{'d'})
     {
@@ -100,6 +100,7 @@ sub main
     $fv->features_ttf(%opts);
     foreach my $t (qw(GSUB GPOS))
     {
+        next unless (defined $font->{$t}{'FEATURES'});
         $font->{$t}{'FEATURES'}{'FEAT_TAGS'} = [sort {$fv->{'featmap'}{$a} cmp $fv->{'featmap'}{$b}} @{$font->{$t}{'FEATURES'}{'FEAT_TAGS'}}];
         $fv->lookups_ttf($t);
         $font->{$t}->dirty;
@@ -238,26 +239,28 @@ sub append_feat
 {
     my ($self, $font, $script, $lang, $feat, $lindex, $type) = @_;
     my ($fname) = "${feat}_${script}_${lang}";
+    my ($othertype) = ($type eq 'GSUB') ? 'GPOS' : 'GSUB';
 
     $self->{'featmap'}{$fname} = $feat;
     
     if ($lang eq 'dflt')
-    { $font->{$type}{'SCRIPTS'}{$script}{'DEFAULT'} = {' REFTAG' => 'dflt'}; }
+    {
+        $font->{$type}{'SCRIPTS'}{$script}{'DEFAULT'} = {' REFTAG' => 'dflt'};
+        $font->{$othertype}{'SCRIPTS'}{$script}{'DEFAULT'} = {' REFTAG' => 'dflt'};
+    }
 
     unless (defined $font->{$type}{'SCRIPTS'}{$script}{$lang})
     {
         push (@{$font->{$type}{'SCRIPTS'}{$script}{'LANG_TAGS'}}, $lang);
+        push (@{$font->{$othertype}{'SCRIPTS'}{$script}{'LANG_TAGS'}}, $lang);
+        $font->{$othertype}{'SCRIPTS'}{$script}{$lang}{'I Exist'} = 1;
     }
 
     unless (defined $font->{$type}{'FEATURES'}{$fname})
-    {
-        push (@{$font->{$type}{'FEATURES'}{'FEAT_TAGS'}}, $fname);
-    }
+    { push (@{$font->{$type}{'FEATURES'}{'FEAT_TAGS'}}, $fname); }
 
     unless (grep {$_ eq $fname} @{$font->{$type}{'SCRIPTS'}{$script}{$lang}{'FEATURES'}})
-    {
-        push (@{$font->{$type}{'SCRIPTS'}{$script}{$lang}{'FEATURES'}}, $fname);
-    }
+    { push (@{$font->{$type}{'SCRIPTS'}{$script}{$lang}{'FEATURES'}}, $fname); }
     
     push (@{$font->{$type}{'FEATURES'}{$fname}{'LOOKUPS'}}, $lindex);
 }
@@ -568,6 +571,7 @@ sub add_gpos_lookup
             }
             for ($i = 0; $i < @{$s->{'first'}}; $i++)
             {
+                next unless ($rules[$i]);
                 $rules[$i] = [sort {$a->{'MATCH'}[0] <=> $b->{'MATCH'}[0]} @{$rules[$i]}];
                 foreach $g (@{$self->scon_glyphs($s->{'first'}[$i])})
                 { $font->{'GPOS'}{'LOOKUP'}[$index]{'SUB'}[0]{'RULES'}[$cover->add($g)] = $rules[$i]; }
@@ -811,8 +815,9 @@ Compiles volt source into OT tables in the font.
 
 =head1 OPTIONS
 
-  -a file     Attachment point database
+  -a file     Attachment point database [only needed for anchor attachment]
   -i          Include all lookups even those not referenced by a used feature
+  -r          Do not delete Volt source table in the font
   -t file     Volt source as text file to use instead of what is in the font
   -h          Help
   -x file     Generate TypeTuner aliases .xml file

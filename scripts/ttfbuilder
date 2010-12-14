@@ -10,7 +10,10 @@ my $VERSION;
 our $CHAIN_CALL;
 our ($if, $of);
 
-$VERSION = 0.30;    # MJPH      13-MAR-2009     Get multifont scaling working
+$VERSION = 0.33;    # MJPH      27-NOV-2009     -a now copies all tables
+# $VERSION = 0.32;    # MJPH      28-JUL-2009     Add <scale> to scale glyphs
+# $VERSION = 0.31;    # MJPH      16-APR-2009     Take last advance for sequential base glyphs
+# $VERSION = 0.30;    # MJPH      13-MAR-2009     Get multifont scaling working
 # $VERSION = 0.30;    # MJPH       6-JAN-2009     Fix font scale reference in offset glyphs
 # $VERSION = 0.29;    # MJPH      18-JUL-2008     Fix references to empty glyphs
 # $VERSION = 0.28;    # MJPH      27-JUN-2008     Add multifont support
@@ -80,6 +83,7 @@ use Font::TTF::Glyph;
 use Font::TTF::Hmtx;
 use Font::TTF::Loca;
 use Font::TTF::PSNames;
+use Font::TTF::Coverage;
 use XML::Parser::Expat;
 
 sub main
@@ -95,13 +99,19 @@ sub main
         preferred_family preferred_subfamily compat_full text CID_name));
 
     my $of = Font::TTF::Font->new();
-    foreach my $t ('OS/2', 'cvt ', 'fpgm', 'gasp', 'head', 'hhea', 'maxp', 'name', 'prep', 'post')
-    {
-        next unless defined $if->{$t};
-        $if->{$t}->read;
-        $of->{$t} = bless {%{$if->{$t}}}, ref $if->{$t};
+    $Font::TTF::Coverage::dontsort = 1;
+    my @tlist;
+    if ($opt_a)
+    { @tlist = sort grep {length($_) == 4 and $_ ne 'glyf' and $_ ne 'loca'} keys %$if; }
+    else
+    { @tlist = ('OS/2', 'cvt ', 'fpgm', 'gasp', 'head', 'hhea', 'maxp', 'name', 'prep', 'post'); }
+    $if->tables_do(sub {
+        my ($table, $t) = @_;
+        return unless $table;
+        $table->read_dat;
+        $of->{$t} = bless {%{$table}}, ref $table;
         $of->{$t}{' PARENT'} = $of;
-    }
+        }, @tlist);
 
     my $ifissymbol = $if->{'cmap'}->read->ms_enc;
     $ifissymbol = 1 if (defined $ifissymbol && $ifissymbol == 0);
@@ -187,6 +197,8 @@ sub main
     }
 
     $if->{'loca'}->read;
+    $if->{'hmtx'}->read;
+    $if->{'post'}->read;
     $of->{'hmtx'} = Font::TTF::Hmtx->new(PARENT => $of, read => 1);
 
     if ($opt_a)
@@ -207,7 +219,6 @@ sub main
             if ($g)
             {
                 $g->read;
-                $bbox = 
                 $aglyph->{'glyph_list'} = [{
                     'glyph' => $g,
                     'GID' => $i,
@@ -215,15 +226,15 @@ sub main
                 $aglyph->{'bbox'} = [$g->{'xMin'}, $g->{'yMin'}, $g->{'xMax'}, $g->{'yMax'}];
             }
     
-            foreach $p (keys %{$xml_dat[$i]{'points'}})
+            foreach $p (keys %{$xml_dat[0][$i]{'points'}})
             {
-                my ($p1) = $xml_dat[$i]{'points'}{$p};
+                my ($p1) = $xml_dat[0][$i]{'points'}{$p};
                 $aglyph->{'points'}{$p}{'base'} = $aglyph;
                 $aglyph->{'points'}{$p}{'loc'} = [@{$p1->{'loc'}}] if (defined $p1->{'loc'});
                 $aglyph->{'points'}{$p}{'cont'} = $p1->{'cont'} if (defined $p1->{'cont'});     # deep copy - klunky
             }
-            $aglyph->{'properties'} = {%{$xml_dat[$i]{'properties'}}} if defined $xml_dat[$i]{'properties'};
-            $aglyph->{'notes'} = $xml_dat[$i]{'notes'} if defined $xml_dat[$i]{'notes'};
+            $aglyph->{'properties'} = {%{$xml_dat[0][$i]{'properties'}}} if defined $xml_dat[0][$i]{'properties'};
+            $aglyph->{'notes'} = $xml_dat[0][$i]{'notes'} if defined $xml_dat[0][$i]{'notes'};
             $g->{'required'} = $i;
             push (@glyphs, $aglyph);
             $of->{'hmtx'}{'advance'}[$i] = $if->{'hmtx'}{'advance'}[$i];
@@ -238,7 +249,7 @@ sub main
     $i = 0;
     foreach my $f (@$fonts)
     {
-        foreach (qw(cmap hmtx loca head))
+        foreach (qw(cmap hmtx loca head post))
         { $f->{$_}->read; }
         $f->{'scale'} = 1. * $if->{'head'}{'unitsPerEm'} / $f->{'head'}{'unitsPerEm'};
         $f->{'number'} = $i++;
@@ -371,6 +382,11 @@ sub main
             $curbase->{'roffset'}[0] += $attrs{'x'};
             $curbase->{'roffset'}[1] += $attrs{'y'};
         }
+        elsif ($tag eq 'scale')
+        {
+            $curbase->{'scale'}[0] = $attrs{'x'};
+            $curbase->{'scale'}[3] = $attrs{'y'};
+        }
         elsif ($tag eq 'string')
         {
             $cur_str = {%attrs};
@@ -388,6 +404,7 @@ sub main
                 $s = '0' x (16 - length($s)) . $s;
                 $of->{'OS/2'}{'ulCodePageRange1'} = hex(substr($s, 8));
                 $of->{'OS/2'}{'ulCodePageRange2'} = hex(substr($s, 0, 8));
+                $of->{'OS/2'}{'Version'} = 1 unless ($of->{'OS/2'}{'Version'});
             }
             if ($s = $attrs{'coverage'})
             {
@@ -396,6 +413,7 @@ sub main
                 $of->{'OS/2'}{'ulUnicodeRange2'} = hex(substr($s, 16, 8));
                 $of->{'OS/2'}{'ulUnicodeRange3'} = hex(substr($s, 8, 8));
                 $of->{'OS/2'}{'ulUnicodeRange4'} = hex(substr($s, 0, 8));
+                $of->{'OS/2'}{'Version'} = 1 unless ($of->{'OS/2'}{'Version'});
             }
         }
         elsif ($tag eq 'property')
@@ -410,15 +428,17 @@ sub main
         {
             $attrs{'num'} = $name_nums{$attrs{'num'}} if (defined $name_nums{$attrs{'num'}});
             $currtext .= $if->{'name'}->find_name($attrs{'num'});
+        } elsif ($tag eq 'point')
+        {
+            $curbase->{'points'}{$attrs{'name'}}{'loc'} = [$attrs{'x'}, $attrs{'y'}];
         }
-
     }, 'End' => sub {
         my ($xml, $tag) = @_;
         my ($curbase) = $xml->{' curbase'};
 
         if ($tag eq 'base' || $tag eq 'attach')
         {
-            $curbase->{'adv'} = $curbase->{'font'}{'hmtx'}{'advance'}[$curbase->{'gid'}] * $curbase->{'font'}{'scale'}
+            $curbase->{'adv'} = $curbase->{'font'}{'hmtx'}{'advance'}[$curbase->{'gid'}] * $curbase->{'font'}{'scale'} * (defined $curbase->{'scale'} ? $curbase->{'scale'}[0] : 1)
                 unless (defined $curbase->{'adv'});
             $xml->{' curbase'} = $curbase->{'parent'};
             $curbase = $xml->{' curbase'};
@@ -436,13 +456,13 @@ sub main
         }
         elsif ($tag eq 'glyph')
         {
-            my ($adv, $g, $xMin, $yMin, $xMax, $yMax, $p, $lorg, $pcount, $i);
+            my ($adv, $g, $xMin, $yMin, $xMax, $yMax, $p, $lorg, $pcount, $i, $lastg);
 
             $i = 0;
             foreach $g (@{$curbase->{'glyphs'}})
             {
-                $pcount = resolve_glyph($g, $adv, 0, $pcount, !(over_asnum($curbase->{'overstrike'}, ($opt_d & 32) >> 4) & 2));    # get absolute position of glyph, create flattened glyph_list
-                $adv = $g->{'adv'};			# + $g->{'offset'}[0]
+                $pcount = resolve_glyph($g, ($lastg ? $lastg->{'adv'} : 0), 0, $pcount, !(over_asnum($curbase->{'overstrike'}, ($opt_d & 32) >> 4) & 2));    # get absolute position of glyph, create flattened glyph_list
+                $adv = $g->{'adv'} if ($g->{'adv'} > $adv);	    # + $g->{'offset'}[0]
                 $lorg = $g->{'lorg'} if ($g->{'lorg'} < $lorg);
                 push (@{$curbase->{'glyph_list'}}, @{$g->{'glyph_list'}});  # compile full glyph list
                 if (defined $g->{'bbox'})
@@ -455,6 +475,7 @@ sub main
                     $curbase->{'properties'}{"component.$i"} = $adv;
                     $i++;
                 }
+                $lastg = $g;
             }
     
             if ((over_asnum($curbase->{'overstrike'}, ($opt_d & 16) >> 4) & 1) && $lorg < 0)
@@ -474,7 +495,9 @@ sub main
     
                 if ($cg->{'offset'}[0] == 0 && $cg->{'offset'}[1] == 0 && !defined $cg->{'scale'})     # no move - then basis for other references
                 { $cg->{'glyph'}{'required'} = $curbase->{'GID'}; }
-                else
+                elsif (!defined $cg->{'glyph'}{'required1'} or
+                    !defined $cg->{'scale'} or
+                    mat_det($glyphs[$cg->{'glyph'}{'required1'}]{'scale'}) < mat_det($cg->{'scale'}))
                 { $cg->{'glyph'}{'required1'} = $curbase->{'GID'}; }         # moved - perhaps a basis
             }
     
@@ -605,6 +628,7 @@ sub main
     
     
     $of->{'maxp'}{'numGlyphs'} = scalar @glyphs;
+    $of->{'post'}->read;
     $of->{'post'}{'VAL'} = [];
     $of->{'loca'} = Font::TTF::Loca->new(PARENT => $of, read => 1);
     $of->{'glyf'} = Font::TTF::Glyf->new(PARENT => $of, read => 1);
@@ -711,13 +735,14 @@ sub main
                 $glyph->{'numberOfContours'} = -1;
                 foreach $gb (@{$g->{'glyph_list'}})
                 {
-                    my ($co) = $glyphs[$gb->{'glyph'}{'required'}]{'glyph_list'}[0];
+                    my ($c) = $glyphs[$gb->{'glyph'}{'required'}];
+                    my ($co) = $c->{'glyph_list'}[0];
     
                     push (@{$glyph->{'comps'}}, {
                         'glyph' => $gb->{'glyph'}{'required'},
                         'flag' => 2,
-        #                'scale' => mat_mult($gb->{'scale'}, $co->{'scale'}),
-                        'scale' => $gb->{'scale'},
+                        'scale' => mat_div($gb->{'scale'}, $co->{'scale'}),
+                #        'scale' => $gb->{'scale'},
                         'args' => [$gb->{'offset'}[0] - $co->{'offset'}[0], $gb->{'offset'}[1] - $co->{'offset'}[1]]});
                 }
             }
@@ -761,9 +786,26 @@ sub main
             print OX "        <contour num=\"" .
                 ($p1->{'cont'} + $pb->{'pathbase'}) .
                 "\"/>\n" if (defined $p1->{'cont'});
-            print OX "        <location x=\"" . ($p1->{'loc'}[0] + $pb->{'offset'}[0]) .
-                "\" y=\"" . ($p1->{'loc'}[1] + $pb->{'offset'}[1]) .
-                "\"/>\n" if ($p1->{'loc'});
+            if ($p1->{'loc'})
+            {
+                my ($x) = $p1->{'loc'}[0];
+                my ($y) = $p1->{'loc'}[1];
+                if ($pb->{'offset'}[0])
+                {
+                    if ($x == 0 and $x != m/^\s*-?[0-9]*\s*$/o)
+                    { $x = "$x + $pb->{'offset'}[0]"; }
+                    else
+                    { $x = $x + $pb->{'offset'}[0]; }
+                }
+                if ($pb->{'offset'}[1])
+                {
+                    if ($y == 0 and $y != m/^\s*-?[0-9]*\s*$/o)
+                    { $y = "$y + $pb->{'offset'}[1]"; }
+                    else
+                    { $y = $y + $pb->{'offset'}[1]; }
+                }
+                print OX "        <location x=\"$x\" y=\"$y\"/>\n";
+            }
             print OX "    </point>\n";
         }
 #       }
@@ -1037,6 +1079,25 @@ sub mat_mult
             ($a->[2] * $b->[0] + $a->[3] * $b->[2]) * $s, ($a->[2] * $b->[1] + $a->[3] * $b->[3]) * $s];
 }
 
+sub mat_div
+{
+    my ($a, $b) = @_;
+
+    return $a unless defined $b;
+    my ($det) = ($b->[0] * $b->[3] - $b->[1] * $b->[2]) * 1.;
+    my ($d) = [$b->[3] / $det, -$b->[1] / $det, -$b->[2] / $det, $b->[0] / $det];
+
+    return $d unless defined $a;
+    return mat_mult($a, $d, 1);
+}
+
+sub mat_det
+{
+    my ($a) = @_;
+    return 1.0 unless (defined $a);
+    return ($a->[0] * $a->[3] - $a->[1] * $a->[2]) * 1.;
+}
+
 __END__
 
 =head1 TITLE
@@ -1099,6 +1160,10 @@ absolute locations in terms of shifting.
 
 Ability to change the name of the font and change strings in the name table.
 
+=item *
+
+Ability to merge glyphs from other fonts.
+
 =back
 
 ttfbuilder is controlled via a description file which describes the glyphs in the
@@ -1135,6 +1200,8 @@ sequence according to their advance widths, creating a single glyph. If a glyph 
 contains a single base glyph with no attachments, and the base glyph has not been
 shifted in any way, then the resulting font will include the glyph directly rather
 than by reference.
+
+The C<font> attribute indicates that the glyph comes from another font. The attribute is a number (starting at 1) that refers to the nth font file in the list of -f command line options. Notice that any hinting associate with the glyph will be lost. The glyph will also be automatically scaled if the units per em of its source font are different from the main font.
 
 =item attach
 

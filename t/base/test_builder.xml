@@ -35,6 +35,9 @@
 </glyph>
 
 <glyph GID="11" PSName="eight" UID="0038">
+    <point type="test">
+        <location x="=(xMin + xMax)/2" y="=yMax + 100"/>
+    </point>
 </glyph>
 
 <glyph GID="12" PSName="nine" UID="0039">

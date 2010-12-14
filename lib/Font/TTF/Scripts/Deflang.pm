@@ -10,19 +10,20 @@ sub ttfdeflang
     my ($font, %opts) = @_;
     my ($f, $t);
 
-    if ($t = $font->{'Sill'}->read and $f = $font->{'Feat'}->read)
+    my ($ltag) = lc($opts{'d'});
+    if (defined $font->{'Sill'} and defined $font->{'Feat'} and $t = $font->{'Sill'}->read and $f = $font->{'Feat'}->read)
     {
-        if (defined $t->{'langs'}{$opts{'d'}})
+        if (defined $t->{'langs'}{$ltag})
         {
             my %change;
-            foreach my $s (@{$t->{'langs'}{$opts{'d'}}})
+            foreach my $s (@{$t->{'langs'}{$ltag}})
             { $change{$s->[0]} = $s->[1]; }
 
             foreach my $g (@{$f->{'features'}})
             { $g->{'default'} = $change{$g->{'feature'}} if (defined $change{$g->{'feature'}}); }
         }
         else
-        { warn "No language $opts{'d'} found in Sill table"; }
+        { warn "No language '$ltag' found in Sill table"; }
     }
 
     my ($lang) = uc($opts{'d'});
@@ -31,14 +32,21 @@ sub ttfdeflang
     foreach my $tk (qw(GSUB GPOS))
     {
         my ($found) = 0;
+        next unless (defined $font->{$tk});
         if ($t = $font->{$tk}->read)
         {
             foreach $s (keys %{$t->{'SCRIPTS'}})
             {
-                if (defined $t->{'SCRIPTS'}{$s}{$lang})
+                if (defined ($l = $t->{'SCRIPTS'}{$s}{$lang}) || defined ($l = $t->{'SCRIPTS'}{$s}{uc($lang)}))
                 {
+                    my ($ttag);
                     $found = 1;
-                    $t->{'SCRIPTS'}{'DEFAULT'}{' REFTAG'} = $lang;
+                    for ($ttag = 'DEFAULT'; $ttag; )
+                    {
+                        last if (defined $l->{' REFTAG'} && $l->{' REFTAG'} eq $ttag);
+                        ($ttag, $t->{'SCRIPTS'}{$s}{$ttag}{' REFTAG'}) = 
+                        ((defined $t->{'SCRIPTS'}{$s}{$ttag}{' REFTAG'} ? $t->{'SCRIPTS'}{$s}{$ttag}{' REFTAG'} : ''), defined $t->{'SCRIPTS'}{$s}{$lang} ? $lang : uc($lang));
+                    }
                     last;
                 }
             }
