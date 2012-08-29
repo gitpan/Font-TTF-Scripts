@@ -2,12 +2,12 @@ Source: libfont-ttf-scripts-perl
 Section: perl
 Priority: optional
 Build-Depends: debhelper (>= 5.0.0)
-Build-Depends-Indep: perl (>= 5.8), libfont-ttf-perl (>= 0.47), libalgorithm-diff-perl, libtext-pdf-perl, libxml-parser-perl
+Build-Depends-Indep: perl (>= 5.8), libfont-ttf-perl (>= 1.0), libalgorithm-diff-perl, libtext-pdf-perl, libxml-parser-perl, libio-string-perl
 Maintainer: Martin Hosken <martin_hosken@sil.org>
 Standards-Version: 3.7.2
 
 Package: libfont-ttf-scripts-perl
-Depends: ${perl:Depends}, libfont-ttf-perl (> 0.45), libalgorithm-diff-perl, libtext-pdf-perl, libxml-parser-perl
+Depends: ${perl:Depends}, libfont-ttf-perl (>= 1.0), libalgorithm-diff-perl, libtext-pdf-perl, libxml-parser-perl
 Architecture: all
 Description:  Perl module for TrueType Font hacking
  This module allows you to do almost anything to a TrueType/OpenType Font

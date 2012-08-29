@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Font-TTF-Scripts
-version:            0.16.1
+version:            1.00
 abstract:           TTF font support scripts for Perl
 author:
     - martin_hosken@sil.org
@@ -12,14 +12,14 @@ build_requires:
     ExtUtils::MakeMaker:  0
 requires:
     Algorithm::Diff:  0
-    Font::TTF:        0.44
+    Font::TTF:        1
     Text::PDF::File:  0
     XML::Parser:      0
 no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.55_02
+generated_by:       ExtUtils::MakeMaker version 6.57_05
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4

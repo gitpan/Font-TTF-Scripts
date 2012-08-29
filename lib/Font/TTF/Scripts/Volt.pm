@@ -11,6 +11,7 @@ Font::TTF::Scripts::Volt - Memory representation of a Volt based font
  $dat = $fv->parse_volt;
  @map = $fv->align_glyphs($dat);
  $fv->merge_volt($dat, \@map);
+ $fv->make_classes;
  $fv->make_anchors;
  $fv->make_groups;
  $fv->make_lookups;
@@ -19,7 +20,7 @@ Font::TTF::Scripts::Volt - Memory representation of a Volt based font
 =head1 DESCRIPTION
 
 C<Font::TTF::Scripts::Volt> is based on and inherits from C<Font::TTF::Scripts::AP>
-and as such contains all the information in such an object. The read method does
+and as such supports all the information and methods in such an object. The read method does
 little beyond calling the corresponding AP method.
 
 The real power in this module is in the C<parse_volt> that can parse Volt source code.
@@ -127,7 +128,7 @@ Array of names of lookups associated with this feature
 =item groups
 
 A hash of group definitions by name. The contents is an array of C<context_item>s corresponding
-to each element in the group's defining enum.
+to each element in the defining enum for the group.
 
 =item lookups
 
@@ -145,7 +146,7 @@ Contains PROCESS_BASE if that is in the lookup
 
 =item marks
 
-Contains either PROCESS_MARKS or SKIP_MARKS
+Contains one of SKIP_MARKS, PROCESS_MARKS, or MARK_GLYPH_SET
 
 =item all
 
@@ -311,6 +312,9 @@ adjust value and the ppem value at which the adjustment occurs.
 use strict;
 use Font::TTF::Font;
 use Font::TTF::Scripts::AP;
+use Unicode::Normalize;
+use Text::Unicode::Equivalents qw(all_strings);
+use Carp;
 
 use vars qw($VERSION @ISA %dat $volt_grammar $volt_parser);
 @ISA = qw(Font::TTF::Scripts::AP);
@@ -319,7 +323,7 @@ $VERSION = "0.02";  # MJPH   9-AUG-2005     Add support for glyph alternates
 # $VERSION = "0.01";  # MJPH  26-APR-2004     Original based on existing code
 # *read_font = \&Font::TTF::Scripts::AP::read_font;
 
-=head2 $ap = Font::TTF::Scripts::Volt->read_font ($ttf_file, $ap_file, %opts)
+=head2 $fv = Font::TTF::Scripts::Volt->read_font ($ttf_file, $ap_file, %opts)
 
 Additional options available to this function include
 
@@ -356,6 +360,15 @@ sub read_font
     $self;
 }
 
+=head2 $fv->out_volt(%opts)
+
+Assembles the VOLT project source and returns it as a multi-line string.
+
+Options include
+
+  -default_glyphtype  Glyphs whose C<type> is unknown get set to this type
+
+=cut
 
 sub out_volt
 {
@@ -500,7 +513,7 @@ sub out_volt_lookups
         {
             my $comment = $l->{'comment'};
             $comment =~ s/($toescape)/$toescapes{$1}/oge;
-            print "COMMENTS \"$comment\"\n";
+            $res .= "COMMENTS \"$comment\"\n";
         }
         if (scalar @{$l->{'contexts'}})
         {
@@ -717,6 +730,9 @@ if (0)
 {
 # VOLT parsing code
 
+# NB: This grammar is no longer being used and though there have been some 
+#     efforts to keep it maintained it does not necessarily work or, in fact,
+#     agree with the RE-based parsing now being used (see below)
 %dat = ();
 
 $volt_grammar = <<'EOG';
@@ -747,10 +763,10 @@ $volt_grammar = <<'EOG';
     glyph_component : 'COMPONENTS' num
             { $return = $item[-1]; }
 
-    script : 'DEF_SCRIPT' <commit> name? tag langsys(s?) 'END_SCRIPT'
+    script : 'DEF_SCRIPT' <commit> name(?) tag langsys(s?) 'END_SCRIPT'
             { $dat{'scripts'}{$item[4]} = {'name' => $item[3], 'tag' => $item[4], 'langs' => $item[5]}; }
 
-    langsys : 'DEF_LANGSYS' name? tag feature(s?) 'END_LANGSYS'
+    langsys : 'DEF_LANGSYS' name(?) tag feature(s?) 'END_LANGSYS'
             { $return = { 'name' => $item[2], 'tag' => $item[3], 'features' => { map {$_->{'tag'} => $_} @{$item[4]}}}; }
 
     feature : 'DEF_FEATURE' name tag lookup_ref(s?) 'END_FEATURE'
@@ -775,7 +791,7 @@ $volt_grammar = <<'EOG';
     lk_comment : /COMMENTS/ qid
             { 
                 my $comment = $item[-1];
-                $comment =~ s/\\($unescape)/$unescapes{$1}/oge;
+                $comment =~ s/\\($Font::TTF::Scripts::Volt::unescape)/$Font::TTF::Scripts::Volt::unescapes{$1}/oge;
                 $return = $comment; 
             }
             
@@ -857,7 +873,8 @@ $volt_grammar = <<'EOG';
 
     lk_procbase : /SKIP_BASE|PROCESS_BASE/
 
-    lk_procmarks : /PROCESS_MARKS|SKIP_MARKS/
+    lk_procmarks : 'PROCESS_MARKS' <commit> 'MARK_GLYPH_SET'(?) {return $item[2] || $item[1];}
+    		| 'SKIP_MARKS' 
 
     lk_all : 'ALL' | qid
             { $return = $item[1] || $item[2]; }
@@ -908,7 +925,7 @@ EOG
 
 #" to keep editors happy
 
-=head2 $f->parse_volt([$vtext])
+=head2 $fv->parse_volt([$vtext])
 
 Parses volt source. If no C<$vtext> then take it from the C<TSIV> table in the font.
 
@@ -1036,7 +1053,8 @@ sub parse_volt
 #                                          'lookup' => $item[9] }); }
 #    lk_procbase : /SKIP_BASE|PROCESS_BASE/
 #
-#    lk_procmarks : /PROCESS_MARKS|SKIP_MARKS/
+#    lk_procmarks : 'PROCESS_MARKS' <commit> 'MARK_GLYPH_SET'(?) {return $item[2] || $item[1];}
+#   		| 'SKIP_MARKS' 
 #
 #    lk_all : 'ALL' | qid
 #            { $return = $item[1] || $item[2]; }
@@ -1044,14 +1062,15 @@ sub parse_volt
 #    lk_direction : 'DIRECTION' /LTR|RTL/            # what about RTL here?
 #            { $return = $item[2]; }
 #
-    while ($str =~ m/\GDEF_LOOKUP\s+"([^"]+)"\s+(?:(SKIP_BASE|PROCESS_BASE)\s+)?(?:(SKIP_MARKS|PROCESS_MARKS)\s+)?(?:(?:(ALL)|"([^"]+)")\s+)?(?:DIRECTION\s+(LTR|RTL)\s+)?/ogc)
+#                                    1             2                               3                                 4                          5      6                            7
+    while ($str =~ m/\GDEF_LOOKUP\s+"([^"]+)"\s+(?:(SKIP_BASE|PROCESS_BASE)\s+)?(?:(SKIP_MARKS|PROCESS_MARKS)\s+)?(?:(MARK_GLYPH_SET)\s+)?(?:(?:(ALL)|"([^"]+)")\s+)?(?:DIRECTION\s+(LTR|RTL)\s+)?/ogc)
     {
         my ($name) = $1;
         push (@{$res->{'lookups'}}, {'id' => $1,
                 'base' => $2,
-                'marks' => $3,
-                'all' => $4 || $5,
-                'dir' => $6});
+                'marks' => $4 || $3,
+                'all' => $5 || $6,
+                'dir' => $7});
 
 #    lk_comment : 'COMMENTS' qid
         while ($str =~ m/\GCOMMENTS\s+"([^"]+)"\s+/ogc)     # " 
@@ -1472,11 +1491,123 @@ sub map_enum
     }
 }
 
+=head2 $fv->normal_rules($ndrawn, \%opts)
+
+Generate ligature lookup C<normal_rules> based on Unicode composition rules. 
+If C<$ndrawn> is true, then add rules for all Unicode composites, otherwise
+only those composites whose glyph is an actual TrueType contour glyph.
+
+Options:
+  -force   force new lookup even if it already exists.
+
+=cut
+
+sub normal_rules
+{
+    my ($self, $ndrawn, $opts) = @_;
+    my ($g, $struni, $seq, $dseq, $dcomb, @decomp, $d, @rules);
+    my ($c) = $self->{'cmap'};
+    my ($glyphs) = $self->{'glyphs'};
+    my %seen;	# Used for error checking to notice multiple rules for same sequence
+	my $id = 'normal_rules';
+
+    if ($opts->{'-force'})
+    { $self->{'lookups'} = [grep {$_->{'id'} ne $id} @{$self->{'lookups'}}]; }
+    else
+    { return if (grep {$_->{'id'} eq $id} @{$self->{'lookups'}}); }
+
+    foreach $g (@{$self->{'glyphs'}})
+    {
+		# Don't generate ligature rules for glyphs that are truetype composites
+		# (as opposed to contour glyphs) unless $ndrawn is true:		
+        next unless ($ndrawn || $g->{'props'}{'drawn'});
+
+        # Perhaps someday we will want to provide options to allow caller to specify
+        # required compositions and decompositions -- something like:
+        # next unless ($g->{'props'}{'drawn'} or exists $required_comp{$g->{'post'}});
+        # next if (exists $required_decomp{$g->{'post'}});
+
+        # Nothing to do unless this is an encoded glyph:
+        next unless exists $g->{'uni'};
+        
+        # glyphs can be multiply encoded and thus have multiple Unicode values, so process each value
+		foreach my $u (@{$g->{'uni'}})
+		{
+	    	# Don't make ligatures unless this is the nominal glyph for this Unicode value:        
+	    	next unless $c->{$u} == $g->{'gnum'};
+	    	
+	    	my $s = pack('U', $u);
+	    	
+	    	# If this character has a Unicode singleton decomposition, build a rule only
+	    	# if its NFC doesn't exist in the font.
+	    	@decomp = unpack('U*', NFC($s));
+	    	next if $#decomp == 0 and $decomp[0] != $u and $c->{$decomp[0]};
+	        
+	        # Process all strings that are cannonically equivalent to this Unicode character:
+	        my $list = all_strings($s);
+	        foreach $struni (@{$list})
+	        {
+	        	# unpack this canonically-equivalent sequence to an array
+	        	@decomp = unpack('U*', $struni);
+	        	# Don't need to make ligatures if length of decomposed sequence is 1
+	        	next if $#decomp == 0;
+	
+		        # Verify the font has all the components.
+		        my ($dok) = 1;
+		        foreach $d (@decomp)
+		        { $dok = 0 unless $c->{$d}; }
+		        next unless $dok;
+		        	        
+		        if ($seen{$struni})
+		        {
+		        	# oops -- have seen this decomposition before!
+		        	carp sprintf("oops: identical decompositions for U+%04X and U+%04X; the latter ignored.\n", $seen{$struni}, $u);
+		        	next;
+		        }
+		        $seen{$struni} = $u;
+	
+		        # Save this ligature data:
+		        push @rules, [ $g->{'gnum'}, [ map {$c->{$_}} @decomp ] ];
+		    }
+		}
+	}
+	
+	# Build the lookup:
+    my ($l) = {'id' => $id, 'base' => 'PROCESS_BASE', 'marks' => 'PROCESS_MARKS',
+                     'all' => 'ALL', 'dir' => 'LTR', 'contexts' => [], 'lookup' =>['sub', []] };
+#        $res .= "DEF_LOOKUP \"l$c\" PROCESS_BASE PROCESS_MARKS ALL DIRECTION LTR\n";
+#        $res .= "IN_CONTEXT\nEND_CONTEXT\nAS_SUBSTITUTION\n";
+
+	# sort rules into longest first, then ascending by first GID
+	foreach my $r (sort { scalar(@{$b->[1]}) <=> scalar(@{$a->[1]}) || $a->[1][0] <=> $b->[1][0] } @rules)
+	{
+		push @{$l->{'lookup'}[1]},   [ [ map { ['GLYPH', $_] } @{$r->[1]} ] , [['GLYPH', $r->[0]]] ] ;
+#        $res .= "SUB GLYPH \"$r->[1][0]\" GLYPH \"$r->[1][1]\" ... \n"; }
+#        $res .= "WITH GROUP \"$r->[0]\"\n";
+#        $res .= "END_SUB\n";
+#        $res .= "END_SUBSTITUTION\n";
+ 		
+	}
+
+	# Add the lookup to font:
+	unshift(@{$self->{'lookups'}}, $l);
+}
+
+=head2 $fv->make_lookups($ligtype, \%opts)
+
+Construct substitution lookups for all C<classes> and C<ligclasses>, and 
+position lookups for all C<lists>. Options include
+
+  -force   force new lookup even if it already exists.
+  -notmark list of anchors that do not imply a MARK glyph (e.g. "_R")
+
+=cut
+
 sub make_lookups
 {
     my ($self, $ligtype, $opts) = @_;
     my ($c);
-
+    	
     foreach $c (sort keys %{$self->{'classes'}})
     {
         next if ($c =~ m/^no_/o);
@@ -1557,8 +1688,7 @@ sub make_lookups
 
 =head2 $fv->make_groups
 
-Convert all C<lists>, C<classes> and C<ligclasses>
-into Volt C<groups>.
+Convert all C<lists>, C<classes> and C<ligclasses> into Volt C<groups>.
 
 =cut
 
@@ -1641,6 +1771,8 @@ NB: This function is not an object method, and it can be overridden by setting t
 option of C<read_font>.
 
 =cut
+
+# ' Make editors happy
 
 sub point2anchor
 {

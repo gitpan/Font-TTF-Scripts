@@ -1,0 +1,26 @@
+---
+abstract: 'TTF font support scripts for Perl'
+author:
+  - martin_hosken@sil.org
+build_requires:
+  ExtUtils::MakeMaker: 0
+configure_requires:
+  ExtUtils::MakeMaker: 0
+distribution_type: module
+dynamic_config: 0
+generated_by: 'ExtUtils::MakeMaker version 6.57_05'
+license: unknown
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Font-TTF-Scripts
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Algorithm::Diff: 0
+  Font::TTF: 1
+  Text::PDF::File: 0
+  XML::Parser: 0
+version: 1.00

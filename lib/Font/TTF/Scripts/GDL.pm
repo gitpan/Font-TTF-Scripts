@@ -122,7 +122,7 @@ sub out_gdl
 
 sub out_classes
 {
-    my ($self, $fh) = @_;
+    my ($self, $fh, %opts) = @_;
     my ($f) = $self->{'font'};
     my ($lists) = $self->{'lists'};
     my ($classes) = $self->{'classes'};
@@ -142,6 +142,7 @@ sub out_classes
         else
         { $name =~ s/^_//o; }
 
+        $fh->print("#define HAS_c${name}Dia 1\n") if ($opts{'-defines'} && $name !~ m/^Takes/o);
         $fh->print("c${name}Dia = (");
         $count = 0; $sep = '';
         foreach $cl (@{$lists->{$l}})
@@ -177,6 +178,7 @@ sub out_classes
 
     foreach $cl (sort {classcmp($a, $b)} keys %{$classes})
     {
+        $fh->print("#define HAS_c$cl 1\n") if ($opts{'-defines'} && $cl !~ m/^no_/o);
         $fh->print("c$cl = ($glyphs->[$classes->{$cl}[0]]{'name'}");
         for ($i = 1; $i <= $#{$classes->{$cl}}; $i++)
         { $fh->print($i % 8 ? ", $glyphs->[$classes->{$cl}[$i]]{'name'}" : ",\n    $glyphs->[$classes->{$cl}[$i]]{'name'}"); }
@@ -185,6 +187,7 @@ sub out_classes
 
     foreach $cl (sort {classcmp($a, $b)} keys %{$ligclasses})
     {
+        $fh->print("#define HAS_clig$cl 1\n") if ($opts{'-defines'} && $cl !~ m/^no_/o);
         $fh->print("clig$cl = ($glyphs->[$ligclasses->{$cl}[0]]{'name'}");
         for ($i = 1; $i <= $#{$ligclasses->{$cl}}; $i++)
         { $fh->print($i % 8 ? ", $glyphs->[$ligclasses->{$cl}[$i]]{'name'}" : ",\n    $glyphs->[$ligclasses->{$cl}[$i]]{'name'}"); }
@@ -310,25 +313,76 @@ sub lig_rules
 {
     my ($self, $fh, $pnum, $type) = @_;
     my ($ligclasses) = $self->{'ligclasses'};
-    my ($c);
+    my ($c, %namemap, $glyph, $name);
 
     return unless (defined $pnum);
-    return unless (scalar %{$self->{'ligclasses'}});
     $fh->print("\ntable(substitution);\npass($pnum);\n");
-    foreach $c (grep {!m/^no_/o} keys %{$ligclasses})
+    if (scalar %$ligclasses)
     {
-        my ($gnum) = $self->{'ligmap'}{$c};
-        my ($gname) = $self->{'glyphs'}[$gnum]{'name'};
-        my ($compstr);
+        foreach $c (grep {!m/^no_/o} keys %{$ligclasses})
+        {
+            my ($gnum) = $self->{'ligmap'}{$c};
+            my ($gname) = $self->{'glyphs'}[$gnum]{'name'};
+            my ($compstr);
 
-        if ($self->{'glyphs'}[$ligclasses->{$c}[0]]{'compounds'}{'0'})
-        { $compstr = ' {component.0.reference = @1; component.1.reference = @2}'; }
+            if ($self->{'glyphs'}[$ligclasses->{$c}[0]]{'compounds'}{'0'})
+            { $compstr = ' {component.0.reference = @1; component.1.reference = @2}'; }
 
-        if ($type eq 'first')
-        { $fh->print("$gname cligno_$c > _ clig$c:(1 2)$compstr / _ ^ _;\n"); }
-        else
-        { $fh->print("cligno_$c $gname > clig$c:(1 2)$compstr _/ ^ _ _;\n"); }
+            if ($type eq 'first')
+            { $fh->print("$gname cligno_$c > _ clig$c:(1 2)$compstr / _ ^ _;\n"); }
+            else
+            { $fh->print("cligno_$c $gname > clig$c:(1 2)$compstr _ / ^ _ _;\n"); }
 
+        }
+    }
+
+    foreach $glyph (@{$self->{'glyphs'}})
+    {
+        foreach $name (split('/', $glyph->{'post'}))
+        { $namemap{$name} = $glyph; }
+    }
+    foreach $glyph (@{$self->{'glyphs'}})
+    {
+        foreach $name (split('/', $glyph->{'post'}))
+        {
+            my ($ext, $base, @elem) = $self->split_lig($name, $type, '');
+            next if ($ext || scalar @elem < 3);
+            my ($islig) = 1;
+            my (@parts, $e, $g);
+            my ($class, $oglyph);
+            if ($type eq 'first')
+            { $class = $elem[0]; }
+            else
+            {
+                $class = $elem[-1];
+                $class =~ s/^_//g;
+            }
+            $class =~ s/\./_/g;
+            $oglyph = $namemap{$base};
+
+            foreach $e (@elem)
+            {
+                my ($n) = $e;
+                my ($g);
+                $n =~ s/_//g;
+                foreach ($n, "uni$n", "u$n")
+                {
+                    if ($g = $namemap{$_})
+                    { last; }
+                }
+                if (!$g)
+                {
+                    $islig = 0;
+                    last;
+                }
+                else
+                {
+                    push(@parts, $g->{'name'});
+                }
+            }
+            next if (!$islig);
+            $fh->print(join(" ", @parts) . " > " . $glyph->{'name'} . ":(" . join(" ", 1 .. ($#parts + 1)) . ") " . join(" ", ("_") x (@parts - 1)) . ";\n");
+        }
     }
     $fh->print("endpass;\nendtable;\n");
 }
@@ -356,4 +410,12 @@ EOT
         $fh->print("cTakes${p}Dia c${p}Dia {attach {to = \@1; at = ${p}S; with = ${p}M}; user1 = 1} / ^ _ opt4(cnTakes${p}Dia) _ {user1 == 0};\n");
     }
     $fh->print("endpass;\nendtable;\n");
+}
+
+sub has
+{
+    my ($cls, $val) = @_;
+    foreach (@{$cls})
+    { return 1 if ($_ == $val); }
+    return 0;
 }

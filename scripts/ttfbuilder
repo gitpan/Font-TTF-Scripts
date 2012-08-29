@@ -112,6 +112,7 @@ sub main
         $of->{$t} = bless {%{$table}}, ref $table;
         $of->{$t}{' PARENT'} = $of;
         $of->{$t}->read;
+        $table->read;
         }, @tlist);
 
     my $ifissymbol = $if->{'cmap'}->read->ms_enc;
@@ -673,6 +674,7 @@ sub main
         {
         
             $glyph = Font::TTF::Glyph->new(PARENT => $of, read => 2);
+            $glyph->{' isDirty'} = 1;
             $glyph->{'xMin'} = $g->{'bbox'}[0];
             $glyph->{'yMin'} = $g->{'bbox'}[1];
             $glyph->{'xMax'} = $g->{'bbox'}[2];
@@ -793,14 +795,14 @@ sub main
                 my ($y) = $p1->{'loc'}[1];
                 if ($pb->{'offset'}[0])
                 {
-                    if ($x == 0 and $x != m/^\s*-?[0-9]*\s*$/o)
+                    if ($x == 0 and $x !~ m/^\s*-?[0-9]*\s*$/o)
                     { $x = "$x + $pb->{'offset'}[0]"; }
                     else
                     { $x = $x + $pb->{'offset'}[0]; }
                 }
                 if ($pb->{'offset'}[1])
                 {
-                    if ($y == 0 and $y != m/^\s*-?[0-9]*\s*$/o)
+                    if ($y == 0 and $y !~ m/^\s*-?[0-9]*\s*$/o)
                     { $y = "$y + $pb->{'offset'}[1]"; }
                     else
                     { $y = $y + $pb->{'offset'}[1]; }
@@ -1253,6 +1255,12 @@ the glyph.
 It is also possible to shift glyphs, at least base and attach glyphs. Shifting
 occurs after attachment (for obvious reasons).
 
+=item scale
+
+Scaling a glyph allows for stretching given the x & y values may be different. The
+x position is multiplied by the x scale and the y position is multiplied by the y
+scale. There is no cross multiplication allowing for rotation.
+
 =item string
 
 In the names section of the description file it is possible to specify strings which
@@ -1331,7 +1339,7 @@ The DTD for the configuration file is:
         overstrike  (0 | false | none | 1 | true | all | both | left 
                        | right)  #IMPLIED>
 
-    <!ELEMENT base (advance | rsb | lsb | attach | shift)*>
+    <!ELEMENT base (advance | rsb | lsb | attach | shift | scale)*>
     <!ATTLIST base
         PSName  CDATA #IMPLIED
         UID     CDATA #IMPLIED
@@ -1339,7 +1347,7 @@ The DTD for the configuration file is:
         font    CDATA #IMPLIED
         noaps   CDATA #IMPLIED>
 
-    <!ELEMENT attach (advance | rsb | lsb | shift)*>
+    <!ELEMENT attach (advance | rsb | lsb | shift | scale)*>
     <!ATTLIST attach
         PSName  CDATA #IMPLIED
         UID     CDATA #IMPLIED
@@ -1363,6 +1371,11 @@ The DTD for the configuration file is:
 
     <!ELEMENT shift EMPTY>
     <!ATTLIST shift
+        x       CDATA #IMPLIED
+        y       CDATA #IMPLIED>
+
+    <!ELEMENT scale EMPTY>
+    <!ATTLIST scale
         x       CDATA #IMPLIED
         y       CDATA #IMPLIED>
 
@@ -1393,6 +1406,7 @@ The DTD for an attachment point database is:
     <!ATTLIST font
         name    CDATA #IMPLIED
         upem    CDATA #IMPLIED
+        producer    CDATA #IMPLIED>
 
     <!ELEMENT glyph (property* | (point | compound)* | note)>
     <!ATTLIST glyph

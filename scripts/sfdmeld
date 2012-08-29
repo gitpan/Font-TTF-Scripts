@@ -77,6 +77,7 @@ $s = Font::TTF::Scripts::SFD->new(
         $currchar->{'gnum'} = $vals[2];
         $$font->{'glyphs'}[$vals[2]] = $currchar;
         $$font->{'gnames'}{$currchar->{'post'}} = $vals[2];
+        $$font->{'numg'} = $vals[2] + 1 if ($$font->{'numg'} <= $vals[2]);
         return undef;
     }, 'AnchorPoint' => sub {
         my ($str, $currchar) = @_;
@@ -165,10 +166,10 @@ for ($i = 0; $i < $design->{'numg'}; $i++)
             my (@l) = ();
             foreach $g (@gs)
             {
-                my ($i) = $revmap[$struct->{'gnames'}{$_}]; 
+                my ($i) = $revmap[$struct->{'gnames'}{$g}]; 
                 push(@l, $design->{'glyphs'}[$i]{'post'}) if ($i);
             }
-            $res .= "$pref " . join(' ', @l) if (scalar @l);
+            $res .= "$pref " . join(' ', @l) . "\n" if (scalar @l);
         }
     }
 # need to merge Kerns2, PairPos2 & Position2 with values coming from the design

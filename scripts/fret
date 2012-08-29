@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+use strict;
 use Font::Fret;
 use Font::TTF::Useall;
 
@@ -7,19 +8,27 @@ fret('Attach', @ARGV);
 package Attach;
 
 use XML::Parser::Expat;
+use Getopt::Std;
+use Pod::Usage;
+
+our (@ISA, $VERSION);
 
 BEGIN {
     @ISA = qw(Font::Fret::Default);
     $VERSION = "1.000";
       }
 
+my ($opts, $apRE);
+
+my ($gid, @xml_dat, $fontname, $fontupem, @rev, @macrev, $usort, $psort);
+
 sub make_cids
 {
     my ($class, $font) = @_;
-    my (@map, @res, $m);
+    my (@map, @res, $m, $pname);
     my ($c) = $font->{'cmap'}->read->find_ms;
 
-    if (defined $ARGV[2])
+    if ($opts->{'a'} || defined $ARGV[2])
     {
         my ($xml) = XML::Parser::Expat->new();
         $xml->setHandlers('Start' => sub {
@@ -35,13 +44,13 @@ sub make_cids
                 $xml_dat[$gid]{'UID'} = $attrs{'UID'};
             } elsif ($tag eq 'point')
             {
-                $pname = $attrs{'type'};
+                $pname = $attrs{'type'} =~ /$apRE/oi ? $attrs{'type'} : undef;;
             } elsif ($tag eq 'contour')
             {
-                $xml_dat[$gid]{'points'}{$pname}{'cont'} = $attrs{'num'};
+                $xml_dat[$gid]{'points'}{$pname}{'cont'} = $attrs{'num'} if $pname;
             } elsif ($tag eq 'location')
             {
-                $xml_dat[$gid]{'points'}{$pname}{'loc'} = [$attrs{'x'}, $attrs{'y'}];
+                $xml_dat[$gid]{'points'}{$pname}{'loc'} = [$attrs{'x'}, $attrs{'y'}] if $pname;
             } elsif ($tag eq 'font')
             {
                 $fontname = $attrs{'name'};
@@ -55,14 +64,14 @@ sub make_cids
             }
         });
 
-        $xml->parsefile($ARGV[2]) || die "Can't parse $ARGV[2]";
+        $xml->parsefile($opts->{'a'} || $ARGV[2]) || die "Can't parse " . ($opts->{'a'} || $ARGV[2]);
     }
 
     @rev = $font->{'cmap'}->read->reverse('array' => 1);
     @map = $font->{'cmap'}->read->reverse;
     $map[$font->{'maxp'}{'numGlyphs'}] = 0;
     foreach $m (@map) { $m = 65536 if $m == 0; }
-    @res = (sort {$map[$a] <=> $map[$b] || $font->{'post'}{'VAL'}[$a] cmp $font->{'post'}{'VAL'}[$b] || $a <=> $b}
+    @res = (sort {($usort && $map[$a] <=> $map[$b]) || ($psort && $font->{'post'}{'VAL'}[$a] cmp $font->{'post'}{'VAL'}[$b]) || $a <=> $b}
             (0 .. $font->{'maxp'}{'numGlyphs'} - 1));
 
     return ("Glyph ID", @res);
@@ -84,7 +93,7 @@ sub topdat
 {
     my ($class, $cid, $gid, $glyph, $uid, $font) = @_;
 
-    return ($gid, "r,r|" . join(',', map {sprintf("|U+%04X", $_)} sort {$a <=> $b} @{$rev[$gid]}));
+    return ($gid, "r,r|" . join(',', map {sprintf("|U+%04X", $_)} sort {$a <=> $b} (defined $rev[$gid] ? @{$rev[$gid]} : ())));
 }
 
 sub row1hdr
@@ -109,7 +118,7 @@ sub row1
     my ($rsb) = $aw - $glyph->{'xMax'};
 
     return ($font->{'post'}{'VAL'}[$gid], $gid, 
-            join(',', map {sprintf("|U+%04X", $_)} sort {$a <=> $b} @{$rev[$gid]}), $macrev[$gid],
+            join(',', map {sprintf("|U+%04X", $_)} sort {$a <=> $b} (defined $rev[$gid] ? @{$rev[$gid]} : ())), $macrev[$gid],
             "r,b|$aw", "r,i|$glyph->{'xMax'}",
             "r,i|$glyph->{'xMin'}", "r,i|$glyph->{'yMax'}",
             "r,i|$glyph->{'yMin'}");
@@ -131,29 +140,61 @@ sub row2
     if (!defined $xml_dat[$gid]{'points'})
     { return (@res); }
     
-    $glyph->get_points;
+    $glyph->get_points if defined $glyph;
     foreach $p (sort keys %{$xml_dat[$gid]{'points'}})
     {
+    	my $res;
         $pc = $xml_dat[$gid]{'points'}{$p};
-        $pnum = $glyph->{'endPoints'}[$pc->{'cont'}];
-        $res = "$p($pc->{'cont'}:";
-#        $res = "$p($pc->{'cont'},$pnum)($pc->{'loc'}[0],$pc->{'loc'}[1])";
-        $res .= "$glyph->{'x'}[$pnum],$glyph->{'y'}[$pnum])";
-#        $res = "$p($pc->{'cont'},$pnum)";
+        if (exists $pc->{'cont'})
+        {
+	        my $pnum = $glyph->{'endPoints'}[$pc->{'cont'}];
+	        $res = "$p($pc->{'cont'}:";
+#	        $res = "$p($pc->{'cont'},$pnum)($pc->{'loc'}[0],$pc->{'loc'}[1])";
+	        $res .= "$glyph->{'x'}[$pnum],$glyph->{'y'}[$pnum])";
+#	        $res = "$p($pc->{'cont'},$pnum)";
+		}
+		elsif (exists $pc->{'loc'})
+		{
+			$res = "$p($pc->{'loc'}[0],$pc->{'loc'}[1])";
+		}
         push (@res, $res);
     }
     return (@res);
 }
 
+sub process_argv
+{
+	my ($self);
+	($self, $opts) = @_;
+	getopts("a:d:fgh:i:m:o:p:qrs:?", $opts);
+	
+	if ($opts->{'?'})
+    {
+        pod2usage( -verbose => 2, -noperldoc => 1);
+    }
+    unless ($ARGV[0])
+    {
+		pod2usage (1);
+	}
+	if ($opts->{'i'})
+	{
+		$apRE = qr/$opts->{'i'}/;
+	}
+	$opts->{'o'} ||= 'up';
+	$usort = 1 if $opts->{'o'} =~ /u/;  # enable Unicode sort
+	$psort = 1 if $opts->{'o'} =~ /p/;  # enable Postname sort
+			# gid sort is always last resort
+}
+	
 __END__
 
 =head1 TITLE
 
-FRET - Font REporting Tool
+fret - Font REporting Tool
 
 =head1 SYNOPSIS
 
-  FRET [-f] [-g] [-r] [-s size] [-p package] [-q] font_file [out_file] [ap.xml]
+  fret [-p package] [-a ap.xml] [-f] [-g] [-i re] [-r] [-s size] [-q] font_file [out_file]
 Generates a report on a font according to a particular package. In some
 contexts the package may be over-ridden. Paper size may also be specified.
 
@@ -162,16 +203,24 @@ contexts the package may be over-ridden. Paper size may also be specified.
 If no out_file is given then out_file becomes font_file.pdf (removing .ttf
 if present)
 
+  -a ap.xml     Attachment point database file
   -f            Don't try to save memory on large fonts (>1000 glyphs)
   -g            Add one glyph per page report following summary report
   -h            Mode for glyph per page output. Bitfield:
                 1 = bit 0       don't output point positions
+  -i re         Regular expression that identifies what attachment points
+                to include in the report
   -m points     Sets glyph size in the box regardless of what is calculated
                 Regardless of the consequences for clashes
+  -o sort       Define sort order. Can be combinations of u (Unicode),
+                p (postname), or i (glyph index). When supplied, priority
+                is u, then p, then i. Default upi.
   -p package    Perl package specification to use for report information
+                (must be first option)
   -q            quiet mode
   -r            Don't output report lines, fill the page with glyph boxes
   -s size       paper size: a4, ltr, legal
+  -?            longer help
 
 =head1 DESCRIPTION
 
@@ -185,7 +234,10 @@ a large outline of each glyph perhaps with the drawn points.
 
 If the optional ap.xml file is specified on the command line then attachment
 point information is included in the report. See ttfbuilder for details of
-the ap.xml file format.
+the ap.xml file format. Only attachment points that match the regular
+expression supplied via the -i option will be included.
+
+If supplied, -p must be the first option.
 
 =head1 SEE ALSO
 
