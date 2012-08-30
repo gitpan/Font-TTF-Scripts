@@ -23,5 +23,6 @@ requires:
   Font::TTF: 1
   IO::String: 0
   Text::PDF::File: 0
+  Text::Unicode::Equivalents: 0
   XML::Parser: 0
-version: 1.01
+version: 1.02
