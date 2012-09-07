@@ -25,4 +25,4 @@ requires:
   Text::PDF::File: 0
   Text::Unicode::Equivalents: 0
   XML::Parser: 0
-version: 1.02
+version: 1.03
