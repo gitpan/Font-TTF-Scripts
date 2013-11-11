@@ -10,7 +10,7 @@ $opt_v ||= 1;
 
 my ($VERSION, $fversion, @extras, @scripts, @theselibs, $fhi, $fho, $perlbin);
 
-$VERSION = "1.03";
+$VERSION = "1.04";
 
 # Fix up inno script by substituting {perl: $var}
 
@@ -70,7 +70,15 @@ foreach \$f (qw($files))
     else
     {
         open(FH, "> \$ARGV[0]\\\\\$f.bat") || die \$@;
-        print FH "\@\\"\$ARGV[0]\\\\parl.exe\\" \\"\$ARGV[0]\\\\fontutils.par\\" \$f %1 %2 %3 %4 %5 %6 %7 %8 %9\\n";
+        print FH <<\"EOB\";
+\\\@echo off
+if "%OS%" == "Windows_NT" goto WinNT
+"\$ARGV[0]\\\\parl.exe" "\$ARGV[0]\\\\fontutils.par" \$f %1 %2 %3 %4 %5 %6 %7 %8 %9
+goto end
+:WinNT
+"\$ARGV[0]\\\\parl.exe" "\$ARGV[0]\\\\fontutils.par" \$f %*
+:end
+EOB
         close(FH);
     }
 }
@@ -112,33 +120,43 @@ elsif ($^O eq 'linux')
 		my ($sign) = '--auto-debsign' if ($opt_r);
 	    my ($fpackage);
 	
-	    $svn =~ s/[0-9]*://og;
-	    $svn =~ s/\s+$//o;
+        $svn =~ s/\s+$//o;
+        if ($svn and $svn ne "exported")
+        {
+    	    $svn =~ s/[0-9]*://og;
+        }
+        else
+        {
+            $svn = `hg identify -n`;
+            $svn =~ s/\+?\s+$//o;
+        }
 	    $package =~ s/::/-/g;
 	    $package = "lib${package}-perl";
 	    $pversion .= "+$svn" unless ($opt_r);
 	    $fpackage = "$package-$pversion";
 	
 	    $res = <<"EOT";
-deb-base: dist
+debsrc: dist
 	rm -fr $self->{'DISTVNAME'}
+	rm -fr $package
 	rm -fr $fpackage
 	tar xvzf $self->{'DISTVNAME'}.tar.gz
-	mv $self->{'DISTVNAME'} $fpackage
-	tar cfz "${package}_$pversion.orig.tar.gz" $fpackage
+	cp -r $self->{'DISTVNAME'} $package
+	tar cvzf ${package}_${pversion}.orig.tar.gz $package
+	cp -r $package $fpackage
 	cp -a debian $fpackage
-	cd $fpackage && find . -name .svn | xargs rm -rf
+	cd $fpackage && dch -v $pversion "interim dev release" && dpkg-buildpackage -S
 
 # make deb builds an interim deb from svn source for release
-deb: deb-base
+deb: debsrc
 EOT
 
 	    foreach my $d (split(' ', $opt_d))
 	    {
 	    	$res .= <<"EOT";
 	mkdir -p dists/$d	
-	dch -D $d -v $pversion-$opt_v -m -b -c $fpackage/debian/changelog "Auto build from perl for $d"
-	cd $fpackage && pdebuild --buildresult ../dists/$d -- --basetgz /var/cache/pbuilder/base-$d.tgz \$pbuilderopts{$d}
+	#dch -D $d -v $pversion-$opt_v -m -b -c $fpackage/debian/changelog "Auto build from perl for $d"
+	#cd $fpackage && pdebuild --buildresult ../dists/$d -- --basetgz /var/cache/pbuilder/base-$d.tgz \$pbuilderopts{$d}
 EOT
 	    }
 	
@@ -160,7 +178,7 @@ WriteMakefile (
 		PREREQ_PM => {
 			'Algorithm::Diff' => 0,
             'IO::String' => 0,
-			'Font::TTF' => 1.00,
+			'Font::TTF' => 1.03,
 			'Text::PDF::File' => 0,
             'Text::Unicode::Equivalents' => 0,
             'XML::Parser' => 0

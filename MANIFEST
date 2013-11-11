@@ -98,6 +98,8 @@ scripts/volt2ap
 scripts/volt2ttf
 t/base/compiled.ttf
 t/base/lamalefliga.ttf
+t/base/psfix.ttf
+t/base/subset.ttf
 t/base/test_builder.ttf
 t/base/test_builder.xml
 t/base/test_classes.xml
@@ -119,6 +121,7 @@ t/base/ttfnamed.ttf
 t/fret.t
 t/lamalefliga.vtp
 t/OFL.txt
+t/psfix.t
 t/schtest.ttf
 t/schtest.vtp
 t/subset.cfg
@@ -131,6 +134,7 @@ t/tt_feat_set_2.xml
 t/tt_font.ttf
 t/ttfbuilder.t
 t/ttfname.t
+t/ttfsubset.t
 t/typetuner.t
 t/Volt2ttf.sample.txt
 t/volt2ttf.t

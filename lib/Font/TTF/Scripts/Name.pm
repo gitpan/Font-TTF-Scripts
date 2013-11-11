@@ -15,7 +15,13 @@ sub ttfname
 
     if (defined $opts{'r'})
     {
-        delete $name->{'strings'}[$opts{'r'}];
+        foreach (split(/[\s,]+/, $opts{'r'}))
+        {
+            my ($n1, $n2) = split('\.\.');
+            $n2 = $n1 unless defined $n2;
+            while ($n1 <= $n2)
+            { delete $name->{'strings'}[$n1++]; }
+        }
         return $font;
     }
 
@@ -36,7 +42,7 @@ sub ttfname
     {
         ## my ($cmap) = $font->{'cmap'}->read;
         ## @cover = map {[$_->{'Platform'}, $_->{'Encoding'}]} @{$cmap->{'Tables'}};
-    	@cover = $name->pe_list();
+        @cover = $name->pe_list();
         $opts{'l'} ||= 'en-US';
     }
 
@@ -97,3 +103,24 @@ sub ttfname
     }
     return $font;
 }
+
+1;
+
+
+=head1 AUTHOR
+
+Martin Hosken L<Martin_Hosken@sil.org>. 
+
+=head1 LICENSING
+
+Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+
+This module and all the various scripts are released under the terms of the
+Artistic License 2.0. For details, see the full text of the license in the file
+LICENSE.
+
+The test suite contains test fonts released under the Open Font License v1.1, see OFL.txt.
+
+
+=cut
+

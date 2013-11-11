@@ -358,7 +358,7 @@ sub read_font
             }
             else
             {
-                my (@basicnames) = qw(.notdef null cr);
+                my (@basicnames) = qw(.notdef .null cr);
 #                $numg ||= 3;
                 if ($cur_glyph->{'gnum'} > $numg)
                 { $numg = $cur_glyph->{'gnum'} + 1; }
@@ -566,7 +566,7 @@ sub make_classes
 
         foreach $p (keys %{$glyph->{'points'}})
         {
-            my ($pname) = $self->make_point($p, $glyph, %opts);
+            my ($pname) = $self->make_point($p, $glyph, \%opts);
             next unless ($pname);                           # allow for point deletion, in effect.
             if ($p ne $pname)
             {
@@ -575,6 +575,8 @@ sub make_classes
             }
             push (@{$self->{'lists'}{$pname}}, $i);
             vec($self->{'vecs'}{$pname}, $i, 1) = 1 if ($self->{'vecs'});
+            next if (defined $opts{'-notmark'} and $opts{'-notmark'} =~ m/\b$pname\b/);
+            vec($self->{'ismarks'}, $i, 1) = 1 if ($pname =~ m/^_/o);
         }
         foreach (split('/', $glyph->{'post'}))
         { $namemap{$_} = $i; }
@@ -688,7 +690,8 @@ By default this returns $pname, but the function could be overridden when subcla
 
 sub make_point
 {
-    my ($self, $p, $glyph, %opts) = @_;
+    my ($self, $p, $glyph, $opts) = @_;
+    return undef if ($opts->{'-ignoredAPs'} and $opts->{'-ignoredAPs'} =~ m/\b$p\b/);
     $p;
 }
 
@@ -882,8 +885,25 @@ sub error
     $self->{'cWARNINGS'}++;
 }
 
+
+1;
+
 =head1 See also
 
 L<TTFBuilder|bin::TTFBuilder>, L<Font::TTF::Font>
+
+=head1 AUTHOR
+
+Martin Hosken L<Martin_Hosken@sil.org>. 
+
+=head1 LICENSING
+
+Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+
+This module and all the various scripts are released under the terms of the
+Artistic License 2.0. For details, see the full text of the license in the file
+LICENSE.
+
+The test suite contains test fonts released under the Open Font License v1.1, see OFL.txt.
 
 =cut

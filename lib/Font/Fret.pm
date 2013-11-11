@@ -474,7 +474,7 @@ use strict;
                 { $ppage->add(sprintf("%.2f %.2f m %s\n", $x, $y, $blob)); }
             } else
             { $ppage->add(sprintf("%.2f %.2f m %s\n", $x, $y, $offblob)); }
-            if ($txt ne '' && $opt{'h'} & 1 == 0)
+            if ($txt ne '' && ($opt{'h'} & 1) == 0)
             {
                 $tw = $pdf_helv->width($txt) * 4.8 + 2;         # 6pt + 2pt margin
                 $tx = $x + ($dirs[$j][0] > 0 ? 0 : -$tw);
@@ -488,10 +488,23 @@ use strict;
                         $tx, $ty, asPDFStr($txt)));
             }
         }
+        if (($opt{'h'} & 2) == 0)
+        {
+            my ($points) = $package->extra_points($font, $gid, $glyph);
 
+            foreach my $p (@{$points})
+            {
+                $x = ($p->[0] - $fxmin) * $optgsize / $upem + 58;
+                $y = ($p->[1] - $fymin) * $optgsize / $upem + 144;
+                $ppage->add(sprintf("%.2f %.2f m %s\n", $x, $y, $bigblob));
+                $ppage->add(sprintf("BT 1 0 0 1 %.2f %.2f Tm 80 Tz /FR 8 Tf %s Tj ET\n",
+                        $x + 3, $y - 3, asPDFStr($p->[2])));
+            }
+        }
         $ppage->{' curstrm'}{'Filter'} = PDFArray(PDFName('FlateDecode'));
         $ppage->ship_out($pdf);
         $ppage->empty;
+        $glyph->empty;
     }
 }
 
@@ -978,4 +991,38 @@ sub label
     { return sprintf("%d.%d(%d,%d)", $pnum, $path, $x, $y); }
     return '';
 }
+
+
+=head2 extra_points
+
+Returns an array of arrays for a list of extra points to display on the glyph page.
+Each sub array consists of [x, y, label]
+
+=cut
+
+sub extra_points
+{
+    my ($class, $font, $gid, $glyph) = @_;
+
+    return [];
+}
+
+=head1 AUTHOR
+
+Martin Hosken L<Martin_Hosken@sil.org>. 
+
+=head1 LICENSING
+
+Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+
+This module and all the various scripts are released under the terms of the
+Artistic License 2.0. For details, see the full text of the license in the file
+LICENSE.
+
+The test suite contains test fonts released under the Open Font License v1.1, see OFL.txt.
+
+
+=cut
+
+1;
 

@@ -255,6 +255,10 @@ Specifies the pixels per em for the grid
 
 Specifies the presentation pixels per em
 
+=item ppfmt2
+
+Optional. If TRUE, then the project options request use of pair position format 2 (rather than the default of format 1).
+
 =item cmap
 
 An array of cmap entries, each of which is an array of 3 numbers.
@@ -263,6 +267,8 @@ An array of cmap entries, each of which is an array of 3 numbers.
 
 In addition to extra entries in the main object there are two types that are used
 in various places:
+
+=back
 
 =head2 context_item
 
@@ -648,6 +654,8 @@ sub out_volt_final
             if ($self->{'info'}{$c})
             { $res .= "$labels{$c} $self->{'info'}{$c}\n"; }
         }
+        if ($self->{'info'}{'ppfmt2'})
+        { $res .= "COMPILER_USEPAIRPOSFORMAT2\n"; }
         foreach $c (@{$self->{'info'}{'cmap'}})
         { $res .= "CMAP_FORMAT $c->[0] $c->[1] $c->[2]\n"; }
         $res .= "END\n";
@@ -882,12 +890,13 @@ $volt_grammar = <<'EOG';
     lk_direction : 'DIRECTION' /LTR|RTL/            # what about RTL here?
             { $return = $item[2]; }
 
-    info : i_grid(?) i_pres(?) i_ppos(?) i_cmap(s?)
+    info : i_grid(?) i_pres(?) i_ppos(?) 'COMPILER_USEPAIRPOSFORMAT2'(?) i_cmap(s?)
             { $dat{'info'} = {
                     grid => $item[1][0],
                     present => $item[2][0],
                     ppos => $item[3][0],
-                    cmap => $item[4] };
+                    ppfmt2 => $item[4],
+                    cmap => $item[5] };
             }
     
     i_grid : 'GRID_PPEM' num
@@ -1271,12 +1280,13 @@ sub parse_volt
         $res->{'glyphs'}[$gnum]{'anchors'}{$name}[$comp-1] = {'pos' => $pos, 'locked' => $locked};
     }
 
-#    info : i_grid(?) i_pres(?) i_ppos(?) i_cmap(s?)
+#    info : i_grid(?) i_pres(?) i_ppos(?) 'COMPILER_USEPAIRPOSFORMAT2'(?) i_cmap(s?)
 #            { $dat{'info'} = {
 #                    grid => $item[1][0],
 #                    present => $item[2][0],
 #                    ppos => $item[3][0],
-#                    cmap => $item[4] };
+#                    ppfmt2 => $item[4],
+#                    cmap => $item[5] };
 #            }
 #    
 #    i_grid : 'GRID_PPEM' num
@@ -1296,6 +1306,9 @@ sub parse_volt
 
     if ($str =~ m/\GPPOSITIONING_PPEM\s+(\d+)\s+/ogc)
     { $res->{'info'}{'ppos'} = $1; }
+
+    if ($str =~ m/\GCOMPILER_USEPAIRPOSFORMAT2\s+/ogc)
+    { $res->{'info'}{'ppfmt2'} = 1; }
 
     while ($str =~ m/\GCMAP_FORMAT\s+(\d+)\s+(\d+)\s+(\d+)\s+/ogc)
     { push (@{$res->{'info'}{'cmap'}}, [$1, $2, $3]); }
@@ -1790,5 +1803,22 @@ sub point2anchor
 =head1 See also
 
 L<Font::TTF::Scripts::AP>
+
+=cut
+
+=head1 AUTHOR
+
+Martin Hosken L<Martin_Hosken@sil.org>. 
+
+=head1 LICENSING
+
+Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+
+This module and all the various scripts are released under the terms of the
+Artistic License 2.0. For details, see the full text of the license in the file
+LICENSE.
+
+The test suite contains test fonts released under the Open Font License v1.1, see OFL.txt.
+
 
 =cut

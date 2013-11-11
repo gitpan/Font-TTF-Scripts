@@ -166,6 +166,7 @@ sub out_classes
             next if ($psname eq '' || $psname eq '.notdef');
             next if (vec($vecs->{$l}, $c, 1));
             next if (defined $glyphs->[$c]{'props'}{'GDL_order'} && $glyphs->[$c]{'props'}{'GDL_order'} <= 1);
+            next unless (vec($self->{'ismarks'}, $c, 1));
             $fh->print("$sep$glyphs->[$c]{'name'}");
             if (++$count % 8 == 0)
             { $sep = ",\n    "; }
@@ -216,10 +217,18 @@ sub endtable
 
 sub end_gdl
 {
-    my ($self, $fh, $include) = @_;
+    my ($self, $fh, $include, $defines) = @_;
+    my ($k, $v);
 
+    while (($k, $v) = each %$defines)
+    {
+        $fh->print("\n#define $k $v");
+    }
     $fh->print("\n#define MAXGLYPH " . ($self->{'font'}{'maxp'}{'numGlyphs'} - 1) . "\n");
-    $fh->print("\n#include \"$include\"\n") if ($include);
+    foreach (@$include)
+    {
+        $fh->print("\n#include \"$_\"\n");
+    }
 }
 
 sub make_name
@@ -250,7 +259,7 @@ sub make_name
 
 sub make_point
 {
-    my ($self, $p, $glyph) = @_;
+    my ($self, $p, $glyph, $opts) = @_;
 
     if ($p =~ m/^%([a-z0-9]+)_([a-z0-9]+)$/oi)
     {
@@ -265,6 +274,7 @@ sub make_point
         return undef;
     }
 
+    return undef if ($opts->{'-ignoredAPs'} and $opts->{'-ignoredAPs'} =~ m/\b$p\b/);
     return $p;
 }
 
@@ -419,3 +429,23 @@ sub has
     { return 1 if ($_ == $val); }
     return 0;
 }
+
+1;
+
+=head1 AUTHOR
+
+Martin Hosken L<Martin_Hosken@sil.org>. 
+
+=head1 LICENSING
+
+Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+
+This module and all the various scripts are released under the terms of the
+Artistic License 2.0. For details, see the full text of the license in the file
+LICENSE.
+
+The test suite contains test fonts released under the Open Font License v1.1, see OFL.txt.
+
+
+=cut
+
