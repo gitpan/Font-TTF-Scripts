@@ -851,9 +851,9 @@ sub scon_glyphs
     my ($dat, $context) = @_;
 
     if ($context->[0] eq 'GLYPH')
-    { return defined $context->[1] ? [$context->[1]] : warn("Undefined glyph"); }
+    { return defined $context->[1] ? [$context->[1]] : do {warn("Undefined glyph"); []}; }
     elsif ($context->[0] eq 'GROUP')
-    { return defined $dat->{'voltdat'}{'groups'}{$context->[1]} ? [sort {$a <=> $b} @{$dat->or_context_glyphs(@{$dat->{'voltdat'}{'groups'}{$context->[1]}})}] : warn "Unknown glyph group $context->[1]"; }
+    { return defined $dat->{'voltdat'}{'groups'}{$context->[1]} ? [sort {$a <=> $b} @{$dat->or_context_glyphs(@{$dat->{'voltdat'}{'groups'}{$context->[1]}})}] : do {warn "Unknown glyph group $context->[1]"; []}; }
     elsif ($context->[0] eq 'RANGE')
     { return [$context->[1] .. $context->[2]]; }
     elsif ($context->[0] eq 'ENUM')
@@ -962,5 +962,17 @@ TypeTuner xml format to the file. If -f is also supplied, the aliases are
 first merged with the features source file: any existing <aliases> element
 (including the empty element, <aliases/> is replaced with the new
 alias definitions.
+
+=head1 AUTHOR
+
+Martin Hosken L<Martin_Hosken@sil.org>
+(see CONTRIBUTORS for other authors).
+
+=head1 LICENSING
+
+Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+
+This script is released under the terms of the Artistic License 2.0.
+For details, see the full text of the license in the file LICENSE.
 
 =cut

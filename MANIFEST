@@ -1,10 +1,5 @@
 Changes
 CONTRIBUTORS
-debian-src/changelog
-debian-src/compat
-debian-src/control
-debian-src/copyright
-debian-src/rules
 doc/make_smart.odp
 doc/TypeTuner_dev/feat_all.dtd
 doc/TypeTuner_dev/feat_all.sample.xml
@@ -19,7 +14,6 @@ Examples/makemono.pl
 Examples/sfdaddap.pl
 Examples/stripcmap.pl
 Examples/symbol.rmp
-Examples/test.ttf
 Examples/thai2gdl.pl
 Examples/thai2ot.pl
 Examples/thai2volt.pl
@@ -63,7 +57,6 @@ LICENSE
 Makefile.PL
 MANIFEST			This list of files
 MANIFEST.SKIP
-META.yml
 MYMETA.yml
 README.TXT
 scripts/add_classes
@@ -138,3 +131,4 @@ t/ttfsubset.t
 t/typetuner.t
 t/Volt2ttf.sample.txt
 t/volt2ttf.t
+META.yml                                 Module meta-data (added by MakeMaker)

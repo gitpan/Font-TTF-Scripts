@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Font-TTF-Scripts
-version:            1.04
+version:            1.04.1
 abstract:           TTF font support scripts for Perl
 author:
     - martin_hosken@sil.org
