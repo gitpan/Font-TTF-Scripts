@@ -67,12 +67,12 @@ Or using the install feature in tools like WinZip.
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>
+Martin Hosken L<http://scripts.sil.org/FontUtils>.
 (see CONTRIBUTORS for other authors).
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This module and all the various scripts are released under the terms of the
 Artistic License 2.0. For details, see the full text of the license in the file

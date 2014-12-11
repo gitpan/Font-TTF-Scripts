@@ -10,6 +10,7 @@ package Attach;
 use XML::Parser::Expat;
 use Getopt::Std;
 use Pod::Usage;
+use IO::File;
 
 our (@ISA, $VERSION);
 
@@ -28,7 +29,7 @@ sub make_cids
     my (@map, @res, $m, $pname);
     my ($c) = $font->{'cmap'}->read->find_ms;
 
-    if ($opts->{'a'} || defined $ARGV[2])
+    if ($opts->{'a'})
     {
         my ($xml) = XML::Parser::Expat->new();
         $xml->setHandlers('Start' => sub {
@@ -64,7 +65,7 @@ sub make_cids
             }
         });
 
-        $xml->parsefile($opts->{'a'} || $ARGV[2]) || die "Can't parse " . ($opts->{'a'} || $ARGV[2]);
+        $xml->parsefile($opts->{'a'}) || die "Can't parse " . $opts->{'a'};
     }
 
     @rev = $font->{'cmap'}->read->reverse('array' => 1);
@@ -162,11 +163,13 @@ sub row2
     return (@res);
 }
 
+my $specialfh;
+
 sub process_argv
 {
 	my ($self);
 	($self, $opts) = @_;
-	getopts("a:d:fgh:i:m:o:p:qrs:?", $opts);
+	getopts("a:bd:fgh:i:m:o:p:qrs:?", $opts);
 	
 	if ($opts->{'?'})
     {
@@ -184,6 +187,11 @@ sub process_argv
 	$usort = 1 if $opts->{'o'} =~ /u/;  # enable Unicode sort
 	$psort = 1 if $opts->{'o'} =~ /p/;  # enable Postname sort
 			# gid sort is always last resort
+    if ($opts->{'b'} && $#ARGV >= 2)
+    {
+        $specialfh = IO::File->new($ARGV[2], "w") || die "Can't open $ARGV[2] for writing";
+        print $specialfh "<?xml version='1.0'?>\n<octaboxes>\n";
+    }
 }
 
 sub extra_points
@@ -198,16 +206,243 @@ sub extra_points
     }
     return [@res];
 }
-	
+
+sub outlinebox
+{
+    my ($xmin, $ymin, $xmax, $ymax, $amin, $smin, $amax, $smax, $col, $label) = @_;
+    my ($x1, $x2, $y1, $y2);
+    my (@res);
+    $col = [.92, .37, .17] unless (defined $col);
+
+    if (defined $specialfh && $label)
+    { printf $specialfh "    <%s xmin='%d' xmax='%d' ymin='%d' ymax='%d' smin='%d' smax='%d' dmin='%d' dmax='%d'/>\n",
+                $label, $xmin, $xmax, $ymin, $ymax, $amin, $amax, $smin, $smax; }
+
+    $x1 = $ymax + $smin; $x2 = $amax - $ymax;
+    if ($x2 < $x1) { push (@res, ['m', 0.5 * ($amax + $smin), 0.5 * ($amax - $smin)]); }
+    else { push (@res, ['m', $x1, $ymax], ["l", $x2, $ymax]); }
+    $y1 = $amax - $xmax; $y2 = $xmax - $smax;
+    if ($y1 < $y2) { push (@res, ["l", 0.5 * ($amax + $smax), 0.5 * ($amax - $smax)]); }
+    else { push (@res, ["l", $xmax, $y1], ["l", $xmax, $y2]); }
+    $x2 = $amin - $ymin; $x1 = $ymin + $smax;
+    if ($x1 < $x2) { push (@res, ["l", 0.5 * ($amin + $smax), 0.5 * ($amin - $smax)]); }
+    else { push (@res, ["l", $x1, $ymin], ["l", $x2, $ymin]); }
+    $y2 = $xmin - $smin; $y1 = $amin - $xmin;
+    if ($y2 < $y1) { push (@res, ["l", 0.5 * ($amin + $smin), 0.5 * ($amin - $smin)]); }
+    else { push (@res, ["l", $xmin, $y1], ["l", $xmin, $y2]); }
+    push (@res, ["RG", @$col], ["s"]);
+    return @res;
+}
+
+sub normalpt
+{
+    my ($g, $x, $y) = @_;
+    my ($newx) = ($x - $g->{'xMin'}) / ($g->{'xMax'} - $g->{'xMin'});
+    my ($newy) = ($y - $g->{'yMin'}) / ($g->{'yMax'} - $g->{'yMin'});
+    return ($newx, $newy);
+}
+
+sub unnormalpt
+{
+    my ($g, $x, $y) = @_;
+    my ($newx) = $x * $g->{'xMax'} + (1 - $x) * $g->{'xMin'};
+    my ($newy) = $y * $g->{'yMax'} + (1 - $y) * $g->{'yMin'};
+    return ($newx, $newy);
+}
+
+sub unnormald
+{
+    my ($g, $a, $s) = @_;
+    my ($newx) = ($a + $s) * 0.5 * ($g->{'xMax'} - $g->{'xMin'}) + $g->{'xMin'};
+    my ($newy) = ($a - $s) * 0.5 * ($g->{'yMax'} - $g->{'yMin'}) + $g->{'yMin'}; 
+    return ($newx + $newy, $newx - $newy);
+}
+
+sub addpoint
+{
+    my ($g, $x, $y, $glyph) = @_;
+
+    push (@{$g->{'points'}}, [$x, $y]);
+    my ($s) = $x - $y;
+    my ($a) = $x + $y;
+    # minmaxes
+    $g->{'bbox'}[0] = $x if (!defined $g->{'bbox'}[0] || $x < $g->{'bbox'}[0]);
+    $g->{'bbox'}[1] = $x if (!defined $g->{'bbox'}[1] || $x > $g->{'bbox'}[1]);
+    $g->{'bbox'}[2] = $y if (!defined $g->{'bbox'}[2] || $y < $g->{'bbox'}[2]);
+    $g->{'bbox'}[3] = $y if (!defined $g->{'bbox'}[3] || $y > $g->{'bbox'}[3]);
+    $g->{'dbox'}[0] = $a if (!defined $g->{'dbox'}[0] || $a < $g->{'dbox'}[0]);
+    $g->{'dbox'}[1] = $a if (!defined $g->{'dbox'}[1] || $a > $g->{'dbox'}[1]);
+    $g->{'dbox'}[2] = $s if (!defined $g->{'dbox'}[2] || $s < $g->{'dbox'}[2]);
+    $g->{'dbox'}[3] = $s if (!defined $g->{'dbox'}[3] || $s > $g->{'dbox'}[3]);
+    if ($glyph)
+    {
+        $glyph->{'dbox'}[0] = $a if (!defined $glyph->{'dbox'}[0] || $a < $glyph->{'dbox'}[0]);
+        $glyph->{'dbox'}[1] = $a if (!defined $glyph->{'dbox'}[1] || $a > $glyph->{'dbox'}[1]);
+        $glyph->{'dbox'}[2] = $s if (!defined $glyph->{'dbox'}[2] || $s < $glyph->{'dbox'}[2]);
+        $glyph->{'dbox'}[3] = $s if (!defined $glyph->{'dbox'}[3] || $s > $glyph->{'dbox'}[3]);
+    }
+}
+
+sub addminmax
+{
+    my ($e, $v) = @_;
+    $e->[0] = $v if (!defined $e->[0] || $v < $e->[0]);
+    $e->[1] = $v if (!defined $e->[1] || $v > $e->[1]);
+}
+
+sub overlay
+{
+    my ($class, $cid, $gid, $glyph, $uid, $font) = @_;
+    my (@res, @grid, $i, $j, $ei, $oldx, $oldy, $oldgx, $oldgy);
+    return () unless ($opts->{'b'});
+
+    if ($specialfh)
+    { printf $specialfh "  <glyph gid='%d' uid='%04X' name='%s'>\n", $gid, $uid, $font->{'post'}{'VAL'}[$gid]; }
+
+    foreach $i (0 .. 3)
+    {
+        foreach $j (0 .. 3)
+        {
+            $grid[$i][$j] = {'cutsi' => [[], [], [], []], 'cutso' => [[], [], [], []]};
+        }
+    }
+
+    $glyph->get_points();
+    $ei = 0;
+    for ($i = 0; $i < @{$glyph->{'x'}}; $i++)
+    {
+        my ($x, $y) = ($glyph->{'x'}[$i], $glyph->{'y'}[$i]);
+        my ($x1, $y1) = normalpt($glyph, $x, $y);
+        my ($gx, $gy) = (int($x1 * 4 - .001), int($y1 * 4 - .001));
+        addpoint($grid[$gx][$gy], $x, $y, $glyph);
+        if (defined $oldgx)
+        {
+            # handle curve lines crossing grid lines
+            while ($oldgx < $gx)
+            {
+                my ($nbx) = ($oldgx + 1) / 4.;
+                my ($t) = ($nbx - $oldx) / ($x1 - $oldx);
+                my ($nby) = $t * $y1 + (1 - $t) * $oldy;
+                my ($bgy) = int($nby * 4 - .001);
+                my ($bx, $by) = unnormalpt($glyph, $nbx, $nby);
+                addpoint($grid[$oldgx][$bgy], $bx, $by);
+                addminmax($grid[$oldgx][$bgy]{'cutso'}[1], $by);
+                ++$oldgx;
+                addpoint($grid[$oldgx][$bgy], $bx, $by);
+                addminmax($grid[$oldgx][$bgy]{'cutsi'}[0], $by);
+            }
+            while ($oldgx > $gx)
+            {
+                my ($nbx) = $oldgx / 4.;
+                my ($t) = ($nbx - $oldx) / ($x1 - $oldx);
+                my ($nby) = $t * $y1 + (1 - $t) * $oldy;
+                my ($bgy) = int($nby * 4 - .001);
+                my ($bx, $by) = unnormalpt($glyph, $nbx, $nby);
+                addpoint($grid[$oldgx][$bgy], $bx, $by);
+                addminmax($grid[$oldgx][$bgy]{'cutso'}[0], $by);
+                --$oldgx;
+                addpoint($grid[$oldgx][$bgy], $bx, $by);
+                addminmax($grid[$oldgx][$bgy]{'cutsi'}[1], $by);
+            }
+            while ($oldgy < $gy)
+            {
+                my ($nby) = ($oldgy + 1) / 4.;
+                my ($t) = ($nby - $oldy) / ($y1 - $oldy);
+                my ($nbx) = $t * $x1 + (1 - $t) * $oldx;
+                my ($bgx) = int($nbx * 4 - .001);
+                my ($bx, $by) = unnormalpt($glyph, $nbx, $nby);
+                addpoint($grid[$bgx][$oldgy], $bx, $by);
+                addminmax($grid[$bgx][$oldgy]{'cutso'}[3], $bx);
+                ++$oldgy;
+                addpoint($grid[$bgx][$oldgy], $bx, $by);
+                addminmax($grid[$bgx][$oldgy]{'cutsi'}[2], $bx);
+            }
+            while ($oldgy > $gy)
+            {
+                my ($nby) = $oldgy / 4.;
+                my ($t) = ($nby - $oldy) / ($y1 - $oldy);
+                my ($nbx) = $t * $x1 + (1 - $t) * $oldx;
+                my ($bgx) = int($nbx * 4 - .001);
+                my ($bx, $by) = unnormalpt($glyph, $nbx, $nby);
+                addpoint($grid[$bgx][$oldgy], $bx, $by);
+                addminmax($grid[$bgx][$oldgy]{'cutso'}[2], $bx);
+                --$oldgy;
+                addpoint($grid[$bgx][$oldgy], $bx, $by);
+                addminmax($grid[$bgx][$oldgy]{'cutsi'}[3], $bx);
+            }
+        }
+        if ($glyph->{'endPoints'}[$ei] == $i)
+        {
+            ++$ei;
+            $oldgx = undef;
+            $oldgy = undef;
+        }
+        else
+        {
+            $oldx = $x1;
+            $oldy = $y1;
+            $oldgx = $gx;
+            $oldgy = $gy;
+        }
+    }
+
+    push (@res, outlinebox($glyph->{'xMin'}, $glyph->{'yMin'}, $glyph->{'xMax'}, $glyph->{'yMax'},
+                          $glyph->{'dbox'}[0], $glyph->{'dbox'}[2], $glyph->{'dbox'}[1], $glyph->{'dbox'}[3], [.375, .754, .078], 'glyphbox'));
+    # add extra corner points if the corner is within a stem
+    foreach $i (0 .. 3)
+    {
+        foreach $j (0 .. 3)
+        {
+            my ($g) = $grid[$j][$i];
+
+            if (defined $g->{'cutsi'}[0][0] && (!defined $g->{'cutso'}[0][0] || $g->{'cutsi'}[0][0] < $g->{'cutso'}[0][0])
+                || defined $g->{'cutso'}[2][0] && (!defined $g->{'cutsi'}[2][0] || $g->{'cutso'}[2][0] < $g->{'cutsi'}[2][0]))
+            { addpoint($g, unnormalpt($glyph, $j / 4, $i / 4)); }
+            if (defined $g->{'cutso'}[0][1] && (!defined $g->{'cutsi'}[0][1] || $g->{'cutso'}[0][1] > $g->{'cutsi'}[0][1])
+                || defined $g->{'cutsi'}[3][0] && (!defined $g->{'cutso'}[3][0] || $g->{'cutsi'}[3][0] < $g->{'cutso'}[3][0]))
+            { addpoint($g, unnormalpt($glyph, $j / 4, ($i + 1) / 4)); }
+            if (defined $g->{'cutso'}[1][0] && (!defined $g->{'cutsi'}[1][0] || $g->{'cutso'}[1][0] < $g->{'cutsi'}[1][0])
+                || defined $g->{'cutsi'}[2][1] && (!defined $g->{'cutso'}[2][1] || $g->{'cutsi'}[2][1] > $g->{'cutso'}[2][1]))
+            { addpoint($g, unnormalpt($glyph, ($j + 1) / 4, $i / 4)); }
+            if (defined $g->{'cutsi'}[1][1] && (!defined $g->{'cutso'}[1][1] || $g->{'cutsi'}[1][1] > $g->{'cutso'}[1][1])
+                || defined $g->{'cutso'}[3][1] && (!defined $g->{'cutsi'}[3][1] || $g->{'cutso'}[3][1] > $g->{'cutsi'}[3][1]))
+            { addpoint($g, unnormalpt($glyph, ($j + 1) / 4, ($i + 1) / 4)); }
+
+            # create box outlines
+            next if (!defined $g->{'bbox'}[0]);     # no points in this box so no outline
+#            push (@res, outlinebox( unnormalpt($glyph, $g->{'bbox'}[0], $g->{'bbox'}[2]),
+#                                    unnormalpt($glyph, $g->{'bbox'}[1], $g->{'bbox'}[3]),
+#                                    unnormald($glyph, $g->{'dbox'}[0], $g->{'dbox'}[2]),
+#                                    unnormald($glyph, $g->{'dbox'}[1], $g->{'dbox'}[3])));
+            push (@res, outlinebox( $g->{'bbox'}[0], $g->{'bbox'}[2], $g->{'bbox'}[1], $g->{'bbox'}[3],
+                                    $g->{'dbox'}[0], $g->{'dbox'}[2], $g->{'dbox'}[1], $g->{'dbox'}[3], undef, "subbox grid='$j,$i'"));
+        }
+    }
+    if ($specialfh)
+    { print $specialfh "  </glyph>\n"; }
+    return @res;
+}
+
+sub final
+{
+    if ($specialfh)
+    {
+        print $specialfh "</octaboxes>\n";
+        $specialfh->close();
+    }
+}
+
 __END__
 
-=head1 TITLE
+=head1 NAME
 
 fret - Font REporting Tool
 
 =head1 SYNOPSIS
 
-  fret [-p package] [-a ap.xml] [-f] [-g] [-i re] [-r] [-s size] [-q] font_file [out_file]
+  fret [-p package] [-a ap.xml] [-f] [-g] [-i re] [-r] [-s size] [-q]
+            font_file [out_file] [bounding_file]
+
 Generates a report on a font according to a particular package. In some
 contexts the package may be over-ridden. Paper size may also be specified.
 
@@ -217,6 +452,7 @@ If no out_file is given then out_file becomes font_file.pdf (removing .ttf
 if present)
 
   -a ap.xml     Attachment point database file
+  -b            Draw bounding octogon. Outputs bounding file if specified.
   -f            Don't try to save memory on large fonts (>1000 glyphs)
   -g            Add one glyph per page report following summary report
   -h            Mode for glyph per page output. Bitfield:
@@ -259,12 +495,12 @@ ttfbuilder
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>
+Martin Hosken L<http://scripts.sil.org/FontUtils>.
 (see CONTRIBUTORS for other authors).
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This script is released under the terms of the Artistic License 2.0.
 For details, see the full text of the license in the file LICENSE.

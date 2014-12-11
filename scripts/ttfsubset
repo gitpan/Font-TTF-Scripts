@@ -1078,8 +1078,14 @@ sub canchangegids
     $self->{' PARENT'}{'Gloc'}->read();
     $maxpseudo = scalar @{$self->{' PARENT'}{'Gloc'}{'locations'}} - 1 - $subsetter->{'numg'};
     $subsetter->{'numPseudo'} = $maxpseudo;
-    foreach my $i (0 .. $maxpseudo - 1)
-    { $subsetter->add_glyph($subsetter->{'numg'} + $i); }
+    foreach my $s (@{$self->{'SILF'}})
+    {
+        $subsetter->add_glyph($s->{'lbGID'});
+        $s->{'lbGID'} = $subsetter->map_glyph($s->{'lbGID'});
+    }
+
+    #foreach my $i (0 .. $maxpseudo - 1)
+    #{ $subsetter->add_glyph($subsetter->{'numg'} + $i); }
     return 1;
 }
 
@@ -1157,6 +1163,7 @@ sub subset_silf
     }
 
     # calculate substitution classes 
+    $silf->{'classes'} = [] if (!defined $silf->{'classes'});
     for (my $i = 0; $i < scalar @{$silf->{'classes'}}; $i++)
     {
         my ($subsetexists) = grep {defined $_ and $subsetter->keep_glyph($_)} @{$silf->{'classes'}[$i]};
@@ -1209,6 +1216,8 @@ sub subset_silf
     # also do class reduction.
     $subsetter->{'silf'}{'classes'} = [];   # for each class a hash of new gid to new class index
     $subsetter->{'silf'}{'classmap'} = [];  # size of each class, -1 for a deleted class
+    my ($numlin) = $self->{'numLinearClasses'};
+    my (@linclasses, @nonlinclasses);
     for (my $i = 0; $i < scalar @{$silf->{'classes'}}; $i++)
     {
         my ($c) = $silf->{'classes'}[$i];
@@ -1217,24 +1226,39 @@ sub subset_silf
         if (scalar @newclass)
         {
             my ($i) = 0;
-            push (@{$subsetter->{'silf'}{'classes'}}, [@newclass]);
-            push (@{$subsetter->{'silf'}{'classmap'}}, $#{$subsetter->{'silf'}{'classes'}}); # does this $# really work?
-            if ($DEBUG)
+            if ($i < $numlin)
             {
-                print "class(".($#{$subsetter->{'silf'}{'classes'}}).") ";
-                print join(",", @newclass)."\n";
+                push (@linclasses, [@newclass]);
+                push (@{$subsetter->{'silf'}{'classmap'}}, $#linclasses);
+            }
+            else
+            {
+                push (@nonlinclasses, [@newclass]);
+                push (@{$subsetter->{'silf'}{'classmap'}}, -(scalar @nonlinclasses));
             }
         }
         else
         {
-            push (@{$subsetter->{'silf'}{'classmap'}}, -1);
+            push (@{$subsetter->{'silf'}{'classmap'}}, undef);
             --$silf->{'numLinearClasses'} if ($i < $silf->{'numLinearClasses'});
         }
         next unless (defined $subsetter->{'silf'}{'class_pairs'}{$i});
         # iterate over class pairs containing arrays of glyphs to create real classes in silf.class and replace
         # the class pairs entry with the id of that new class.
         while(my ($k,$v) = each %{$subsetter->{'silf'}{'class_pairs'}{$i}})
-        { $subsetter->{'silf'}{'class_pairs'}{$i}{$k} = [map {$self->addmappedclass($_, $subsetter)} @{$v}]; }
+        {
+            $self->addmappedclass($v->[0], \@linclasses);
+            $self->addmappedclass($v->[1], \@nonlinclasses);
+        }
+    }
+    @{$subsetter->{'silf'}{'classes'}} = (@linclasses, @nonlinclasses);
+    $silf->{'numLinearClasses'} = scalar @linclasses;
+    foreach my $r (@{$subsetter->{'silf'}{'classmap'}})
+    {
+        if (!defined $r)
+        { $r = -1; }
+        elsif ($r < 0)
+        { $r = $silf->{'numLinearClasses'} - $r; }
     }
 
     # see what other rules we can delete
@@ -1253,7 +1277,15 @@ sub subset_silf
         { $subsetter->{'silf'}{'passes'}[$i] = undef; }
     }
 
-    $silf->{'maxGlyphID'} = $subsetter->{'gcount'}  + $subsetter->{'numPseudo'} - 1;
+    foreach my $k (keys %{$silf->{'pseudos'}})
+    {
+        my ($g) = $silf->{'pseudos'}{$k};
+        if ($subsetter->keep_glyph($g))
+        { $silf->{'pseudos'}{$k} = $subsetter->map_glyph($g); }
+        else
+        { delete $silf->{'pseudos'}{$k}; }
+    }
+    $silf->{'maxGlyphID'} = $subsetter->{'gcount'} - 1;
     $silf->{'classes'} = $subsetter->{'silf'}{'classes'};
 }
 
@@ -1465,6 +1497,7 @@ sub finalise_pass
         $lastrule = $rulemap[$i];
         my (@rinfo) = $self->unpack_code($pass->{'actionCode'}[$i]);
         my ($c) = 0;
+        my ($deleterule) = 0;
         foreach my $r (@rinfo)
         {
             # update action code if needbe
@@ -1478,19 +1511,19 @@ sub finalise_pass
                     # so that only a subset of the column has a path to this rule. Edit the fsm accordingly.
                     # This will grow the fsm. But later deduping can shrink it again. Actually a good form of
                     # optimisation.
-                    $self->remove_trail($subsetter, $cinfo, $pass, $i, $c, 
+                    $deleterule |= $self->remove_trail($subsetter, $cinfo, $pass, $i, $c, $r->[2],
                         $subsetter->{'silf'}{'class_pairs_removed'}{$r->[2]}{$r->[3]})
                             if (defined $subsetter->{'silf'}{'class_pairs_removed'}{$r->[2]}{$r->[3]});
                     # update the action code
-                    ($r->[2], $r->[3]) = @{$subsetter->{'silf'}{'class_pairs'}{$r->[2]}{$r->[3]}};
+                    #($r->[2], $r->[3]) = @{$subsetter->{'silf'}{'class_pairs'}{$r->[2]}{$r->[3]}};
                 }
                 else
                 {
                     testclass($r->[2], $subsetter, "pass $pass->{'id'}, rule ${i}a");
                     testclass($r->[3], $subsetter, "pass $pass->{'id'}, rule ${i}b");
-                    $r->[2] = $subsetter->{'silf'}{'classmap'}[$r->[2]];
-                    $r->[3] = $subsetter->{'silf'}{'classmap'}[$r->[3]];
                 }
+                $r->[2] = $subsetter->{'silf'}{'classmap'}[$r->[2]];
+                $r->[3] = $subsetter->{'silf'}{'classmap'}[$r->[3]];
             }
             elsif ($r->[0] eq 'put_glyph_8bit_obs' or $r->[0] eq 'put_glyph')
             {
@@ -1499,9 +1532,20 @@ sub finalise_pass
             }
             # log which glyph attributes are actually referenced and delete the rest.
         }
-        push (@rules, $self->pack_code(\@rinfo));
+        if ($deleterule)
+        {
+            @rulemap = map {$_ == $lastrule ? -1 : ($_ > $lastrule ? $_ - 1 : $_)} @rulemap;
+            splice(@revrulemap, $lastrule, 1);
+            $lastrule--;
+        }
+        else
+        {    
+            push (@rules, $self->pack_code(\@rinfo));
+        }
     }
 
+    if (scalar @rules != scalar @revrulemap)
+    { die "rules and revrulemap are different lengths!"; }
     # rebuild startStates given some of them may have been deleted.
     for ($i = 0; $i < scalar @{$pass->{'startStates'}}; $i++)
     {
@@ -1709,7 +1753,7 @@ sub finalise_pass
     $pass->{'rulePreContexts'} = [@prectxts];
     $pass->{'actionCode'} = [@rules];
     $pass->{'constraintCode'} = [@ruleconstraints];
-    $pass->{'numRules'} = $numrules;
+    $pass->{'numRules'} = scalar @rules;
     return 1;
 }
 
@@ -1822,14 +1866,14 @@ sub delrow
 # returns the new class id
 sub addmappedclass
 {
-    my ($self, $class, $subsetter) = @_;
+    my ($self, $class, $classes) = @_;
     my ($l) = scalar @{$class};
     my (@m) = map {$subsetter->map_glyph($_)} @{$class};
 
-    for (my $i = 0; $i < @{$subsetter->{'silf'}{'classes'}}; $i++)
+    for (my $i = 0; $i < @{$classes}; $i++)
     {
         my ($nomatch) = 0;
-        my ($c) = $subsetter->{'silf'}{'classes'}[$i];
+        my ($c) = $classes->[$i];
         next unless (scalar @{$c} == $l);
         foreach (my $j = 0; $j < $l; $j++)
         {
@@ -1842,10 +1886,8 @@ sub addmappedclass
         return $i if (!$nomatch);
     }
     my ($i) = 0;
-    push (@{$subsetter->{'silf'}{'classes'}}, [@m]);
-    if ($DEBUG)
-    { print "class(" . $#{$subsetter->{'silf'}{'classes'}} . ") " . join(",", @m) . ".\n"; } 
-    return $#{$subsetter->{'silf'}{'classes'}};
+    push (@{$classes}, [@m]);
+    return $#{$classes};
 }
 
 # given a list of columns, a starting row and a number of steps backwards to walk,
@@ -1855,6 +1897,8 @@ sub addmappedclass
 sub addrowsfor
 {
     my ($self, $pass, $cinfo, $cols, $len, $row, $parent, $total) = @_;
+    # $parent is the row of interest
+    # $row is the row leading to $parent
     my ($res);
 
     if ($len == 0)
@@ -1923,12 +1967,15 @@ sub addrowsfor
 # deduping later will take care of that.        
 sub remove_trail
 {
-    my ($self, $subsetter, $cinfo, $pass, $rule, $index, $glyphlist) = @_;
+    my ($self, $subsetter, $cinfo, $pass, $rule, $index, $col, $glyphlist) = @_;
     $index += $pass->{'rulePreContexts'}[$rule];
     my ($countback) = $pass->{'ruleSortKeys'}[$rule] - $index;
     my (@glyphs) = (@{$glyphlist});
+    my (%outmap) = map {$_ => 1} @glyphs;
+    my (%inmap) = map {$_ => 1} grep {!defined $outmap{$_}} @{$cinfo->{'glyphcols'}[$col]};
     my (@paths, @collist);
     my ($fsm) = $pass->{'fsm'};
+    my ($deleteme) = (length(@glyphs) > 0);
 
     # Identify columns to split and split them
     # test each collection of glyphs with a given column id against that complete
@@ -1937,7 +1984,7 @@ sub remove_trail
     # through the fsm
     while (@glyphs)
     {
-        my (@glist, $newc);
+        my (@glist);
         my ($g) = shift(@glyphs);
         my ($c) = $pass->{'colmap'}{$g};
         push (@glist, $g);
@@ -1951,9 +1998,16 @@ sub remove_trail
             else
             { $i++; }
         }
-        if (defined $cinfo->{'glyphcols'} and scalar @{$cinfo->{'glyphcols'}[$c]} != scalar @glist)
-        { $self->splitcol($c, \@glist, $pass, $cinfo); }
+        my ($new) = $self->splitcol($c, \@glist, $pass, $cinfo);
+        $deleteme = 0 if ($new != $c);
+        foreach my $r (@{$cinfo->{'rules'}[$rule]})
+        {
+            foreach my $p (keys %{$cinfo->{'rowbackrefs'}[$r]})
+            { $pass->{'fsm'}[$p][$new] = 0; }
+        }
     }
+
+    return $deleteme;
 
     # get a list of paths to trim. Each path includes the final row and is from to end to start
     my (%rowmap);
@@ -2017,10 +2071,17 @@ sub remove_trail
 sub splitcol
 {
     my ($self, $col, $removes, $pass, $cinfo) = @_;
-    my ($new) = $pass->{'numColumns'}++;
     my (%others) = map {$_ => 1} @{$removes};
-    $cinfo->{'glyphcols'}[$col] = [grep {!defined $others{$_}} @{$cinfo->{'glyphcols'}[$col]}];
-    $cinfo->{'glyphcols'}[$new] = [@{$removes}];
+    my ($olds) = [grep {!defined $others{$_}} @{$cinfo->{'glyphcols'}[$col]}];
+    my ($new);
+    if (scalar @{$olds})
+    {
+        $cinfo->{'glyphcols'}[$col] = $olds;
+        $new = $pass->{'numColumns'}++;
+        $cinfo->{'glyphcols'}[$new] = [@{$removes}];
+    }
+    else
+    { return $col; }
 
     foreach my $r (@{$pass->{'fsm'}})
     {
@@ -2101,7 +2162,7 @@ sub arraycmp
 
 __END__
 
-=head1 TITLE
+=head1 NAME
 
 ttfsubset - subset a font
 
@@ -2157,12 +2218,12 @@ in smaller output fonts.
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>
+Martin Hosken L<http://scripts.sil.org/FontUtils>.
 (see CONTRIBUTORS for other authors).
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This script is released under the terms of the Artistic License 2.0.
 For details, see the full text of the license in the file LICENSE.

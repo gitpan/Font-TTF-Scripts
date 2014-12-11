@@ -85,7 +85,7 @@ foreach (@tags)
 }
 
 
-=head1 TITLE
+=head1 NAME
 
 dumpfont - dump table structures from L<Font::TTF::Font>
 
@@ -106,12 +106,12 @@ any element whose value is a Font::TTF::Font object, in any of the data structur
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>
+Martin Hosken L<http://scripts.sil.org/FontUtils>.
 (see CONTRIBUTORS for other authors).
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This script is released under the terms of the Artistic License 2.0.
 For details, see the full text of the license in the file LICENSE.

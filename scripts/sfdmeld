@@ -236,11 +236,11 @@ for ($i = 0; $i < $struct->{'numg'}; $i++)
     next if ($char->{'used'});
 
     $char->{'gnum'} = $design->{'numg'}++;
-    foreach ($char->{'lines'})
+    foreach (@{$char->{'lines'}})
     {
         if (m/^Encoding:\s+/o)
         {
-            $_ = sprintf("Encoding: %d %04X %d\n", $char->{'encoded'}, $char->{'uni'}[0], $char->{'gnum'});
+            $_ = sprintf("Encoding: %d %04X %d\n", $char->{'gnum'}, $char->{'uni'}[0], $char->{'gnum'});
             last;
         }
     }
@@ -423,7 +423,7 @@ sub print_font
 
 __END__
 
-=head1 TITLE
+=head1 NAME
 
 sfdmeld - merges sfd files
 
@@ -449,12 +449,12 @@ ttfbuilder, sfd2ap
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>
+Martin Hosken L<http://scripts.sil.org/FontUtils>.
 (see CONTRIBUTORS for other authors).
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This script is released under the terms of the Artistic License 2.0.
 For details, see the full text of the license in the file LICENSE.

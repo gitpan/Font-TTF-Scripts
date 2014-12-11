@@ -10,6 +10,7 @@ Examples/cp1252.xml
 Examples/eurofix.pl
 Examples/fixmaxcontext.pl
 Examples/fontcoverage.pl
+Examples/glyphtracer.pl
 Examples/makemono.pl
 Examples/sfdaddap.pl
 Examples/stripcmap.pl
@@ -48,6 +49,7 @@ lib/Font/Fret.pm
 lib/Font/TTF/Scripts.pod
 lib/Font/TTF/Scripts/AP.pm
 lib/Font/TTF/Scripts/Deflang.pm
+lib/Font/TTF/Scripts/Fea.pm
 lib/Font/TTF/Scripts/GDL.pm
 lib/Font/TTF/Scripts/GDL_old.pm
 lib/Font/TTF/Scripts/Name.pm
@@ -66,12 +68,19 @@ scripts/check_attach
 scripts/dumpfont
 scripts/fret
 scripts/hackos2
+scripts/make_fea
 scripts/make_gdl
 scripts/make_volt
 scripts/psfix
 scripts/sfd2ap
 scripts/sfdmeld
 scripts/sfdmerge
+scripts/test-03.png
+scripts/test-03a.png
+scripts/test.pdf
+scripts/test_tai-3.png
+scripts/test_tai-3a.png
+scripts/test_tai.pdf
 scripts/ttf2volt
 scripts/ttf2woff
 scripts/ttfascent
@@ -119,6 +128,7 @@ t/schtest.ttf
 t/schtest.vtp
 t/subset.cfg
 t/testclasses.xml
+t/testfont.pdf
 t/testfont.ttf
 t/testfont_1.xml
 t/tt_feat_all.xml
@@ -131,4 +141,5 @@ t/ttfsubset.t
 t/typetuner.t
 t/Volt2ttf.sample.txt
 t/volt2ttf.t
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

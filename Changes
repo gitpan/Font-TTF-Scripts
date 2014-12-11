@@ -1,3 +1,26 @@
+1.04_90 (r1053, 2014-10-11)
+
+* make_fea generates AFDKO feature files
+* make_gdl, make_volt, make_fea parameters harmonized; 
+*   added -c support to obviate make_classes
+* fret -b, to show octaboxes
+*
+* Bug fixes:
+*    ttfsubset
+*        fix graphite generation
+*    hackos2
+*        fix OS/2 table padding and checksum
+*    ttffeatparams 
+*        correctly handles multiple cvxx/ssxx features
+*        selects correct existing strings
+*    ttf2woff 
+*        catches checksum/alignment issues rather than silently build faulty font
+*    sfdmeld
+*        fix adding new glyphs from struct to design
+*    ttftable
+*        vixed various problems related to WOFF fonts
+*
+
 1.04.1 (r995, 2014-01-09)
 
 * Bug fixes:

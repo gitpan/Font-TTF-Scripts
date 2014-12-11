@@ -47,7 +47,7 @@ $f->out($ARGV[1]) if (defined $ARGV[1]);
 
 __END__
 
-=head1 TITLE
+=head1 NAME
 
 ttfascent - sets ascent and descent of a TrueType font
 
@@ -72,12 +72,12 @@ sets the values in their default relationship.
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>
+Martin Hosken L<http://scripts.sil.org/FontUtils>.
 (see CONTRIBUTORS for other authors).
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This script is released under the terms of the Artistic License 2.0.
 For details, see the full text of the license in the file LICENSE.

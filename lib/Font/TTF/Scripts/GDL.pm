@@ -160,14 +160,17 @@ sub out_classes
 
         $fh->print("cn${name}Dia = (");
         $count = 0; $sep = '';
+        $self->{'hasnclass'}{$l} = 0;
         for ($c = 0; $c < $f->{'maxp'}{'numGlyphs'}; $c++)
         {
             $psname = $f->{'post'}{'VAL'}[$c];
             next if ($psname eq '' || $psname eq '.notdef');
             next if (vec($vecs->{$l}, $c, 1));
+            next if (!(substr($l, 0, 1) eq "_") and vec($vecs->{"_$l"}, $c, 1));
             next if (defined $glyphs->[$c]{'props'}{'GDL_order'} && $glyphs->[$c]{'props'}{'GDL_order'} <= 1);
             next unless (vec($self->{'ismarks'}, $c, 1));
             $fh->print("$sep$glyphs->[$c]{'name'}");
+            $self->{'hasnclass'}{$l} = 1;
             if (++$count % 8 == 0)
             { $sep = ",\n    "; }
             else
@@ -417,7 +420,7 @@ EOT
     foreach $p (keys %{$lists})
     {
         next if ($p =~ m/^_/o);
-        $fh->print("cTakes${p}Dia c${p}Dia {attach {to = \@1; at = ${p}S; with = ${p}M}; user1 = 1} / ^ _ opt4(cnTakes${p}Dia) _ {user1 == 0};\n");
+        $fh->print("cTakes${p}Dia c${p}Dia {attach {to = \@1; at = ${p}S; with = ${p}M}; user1 = 1} / ^ _ " . ($self->{'hasnclass'}{$p} ? "opt4(cnTakes${p}Dia) " : "") . "_ {user1 == 0};\n");
     }
     $fh->print("endpass;\nendtable;\n");
 }
@@ -434,11 +437,11 @@ sub has
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>. 
+Martin Hosken L<http://scripts.sil.org/FontUtils>. 
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This module is released under the terms of the Artistic License 2.0.
 For details, see the full text of the license in the file LICENSE.

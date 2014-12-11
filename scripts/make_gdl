@@ -6,9 +6,26 @@ use Getopt::Long;
 use Pod::Usage;
 
 our(%opts);
-GetOptions(\%opts, 'ap|a=s', 'autodefines|d', 'empty|e=s', 'help|h', 'include|i=s@', 'ligatures|l=s',
-                'normalize|n=i', 'omitaps|o=s', 'positions|p=i', 'renameaps|r', 'substitutions|s=i',
-                'z=i', 'define|D=s%', 'mark|m=s');
+GetOptions(\%opts, 
+	'ap|a=s', 
+	# 'b',				# used in make_volt
+	'classfile|c=s', 
+	'classprops',
+	'autodefines|d', 
+	'define|D=s%', 
+	'empty|e=s', 
+	# 'forceadd|f=i', 	# used in make_volt
+	'help|h', 
+	'include|i=s@', 
+	'ligatures|l=s',
+	'mark|m=s', 
+	'normalize|n=i', 
+	'omitaps|o=s', 
+	'positions|p=i', 
+	'renameaps|r', 
+	'substitutions|s=i',
+	# 'outVOLT|t',		# used in make_volt
+	'z=i');
 
 unless ($ARGV[1] || $opts{'help'})
 {
@@ -25,10 +42,10 @@ if ($opts{'help'})
 my %options;
 
 # Parse -e file if supplied
-if ($opts{'excludes'}) 
+if ($opts{'empty'}) 
 {
     my @glist;
-	open (IN, "<$opts{'excludes'}") or die "Couldn't open '$opts{'excludes'}' for reading.";
+	open (IN, "<$opts{'empty'}") or die "Couldn't open '$opts{'empty'}' for reading.";
 	while (<IN>)
 	{
 		s/[\r\n]*$//o;      # platform-safe chomp
@@ -73,6 +90,7 @@ if ($opts{'renameaps'})
 
 $f->{'vecs'} = {};
 
+$f->add_classfile($opts{'classfile'}, -p => $opts{'classprops'}) if ($opts{'classfile'});
 $f->start_gdl($outfh);
 $f->make_classes(-ligatures => $opts{'ligatures'}, -ligtype => $comp, -ignoredAPs => $options{'omitaps'}, -notmark => $opts{'mark'});
 $f->out_gdl($outfh, -split_ligs => ($opts{'z'} & 1), -psnames => ($opts{'z'} & 4));
@@ -87,7 +105,7 @@ $outfh->close();
 
 __END__
 
-=head1 TITLE
+=head1 NAME
 
 make_gdl - Create GDL from a TrueType Font
 
@@ -101,6 +119,10 @@ Creates font specific GDL from a font and optional attachment point database
 =head1 OPTIONS
 
   -a file       Attachment point database
+  -c classfile  xml file of class and property information to merge in
+  --classproperties
+                specifies whether classes are made for property values in
+                the classfile
   -d            Output per class #defines for key classes
   -D name=val   Add #defines to output gdl
   -e file       A file containing names (1 per line) of glyphs that are 
@@ -223,18 +245,35 @@ Since a GDL description is only a single file, the command line allows one to
 specify another GDL file to include at the end of the file. This makes including
 a font independent GDL fragment much easier.
 
+=head2 Classfile
+
+The DTD for the classes file is:
+
+    <!ELEMENT classes (class, property)*>
+
+    <!ELEMENT class (#PCDATA)>
+    <!ATTLIST class
+        name    CDATA #REQUIRED
+        exts    CDATA #IMPLIED>
+
+    <!ELEMENT property (#PCDATA)>
+    <!ATTLIST property
+        name    CDATA #REQUIRED
+        value   CDATA #REQUIRED
+        exts    CDATA #IMPLIED>
+
 =head1 SEE ALSO
 
 ttfbuilder
 
 =head1 AUTHOR
 
-Martin Hosken L<Martin_Hosken@sil.org>
+Martin Hosken L<http://scripts.sil.org/FontUtils>.
 (see CONTRIBUTORS for other authors).
 
 =head1 LICENSING
 
-Copyright (c) 1998-2013, SIL International (http://www.sil.org)
+Copyright (c) 1998-2014, SIL International (http://www.sil.org)
 
 This script is released under the terms of the Artistic License 2.0.
 For details, see the full text of the license in the file LICENSE.
